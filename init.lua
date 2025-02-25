@@ -16,6 +16,22 @@
 -- an open file to inline as context to the model prompt.
 --
 -- [Ollama]: https://ollama.com/
+--
+-- ## Chatting with external models
+--
+-- You can configure this module to talk to external models that do not use the Ollama API.
+-- Here is a sample configuration to talk to an OpenAI-compatible model (tested with [LiteLLM][]):
+--
+-- 	local ollama = require('ollama')
+-- 	ollama.url = 'https://example.com'
+-- 	ollama.models_endpoint = '/models'
+-- 	ollama.model_name_key = 'id'
+-- 	ollama.chat_endpoint = '/chat/completions'
+-- 	ollama.chat_message = function(response) return response.choices[1].message end
+-- 	ollama.curl_headers = {['Content-Type'] = 'application/json'}
+-- 	ollama.api_key = 'API_KEY'
+--
+-- [LiteLLM]: https://docs.litellm.ai/
 -- @module ollama
 local M = {}
 
@@ -31,7 +47,33 @@ if not rawget(_L, 'Ollama') then
 end
 
 --- URL Ollama is running on (http://host:port).
+-- The default value is `http://localhost:11434` and should only be changed if Ollama is running on
+-- a different port, or if you are not using Ollama.
 M.url = 'http://localhost:11434'
+
+--- REST endpoint for fetching a list of available models.
+-- The default value is '/api/tags' and should only be changed if you are not using Ollama.
+M.models_endpoint = '/api/tags'
+
+--- The key whose value is the model name for each model in the REST response for `models_endpoint`.
+-- The default value is 'name' and should only be changed if you are not using Ollama.
+M.model_name_key = 'name'
+
+--- REST endpoint for chatting with a model.
+-- The default value is '/api/chat' and should only be changed if you are not using Ollama.
+M.chat_endpoint = '/api/chat'
+
+--- Function to extract the message from the REST response for `chat_endpoint`.
+-- This should only be changed if you are not using Ollama.
+M.chat_message = function(response) return response.message end
+
+--- Optional map of HTTP headers to send with curl requests to an external model.
+-- The default value is an empty map since Ollama does not need any headers.
+M.curl_headers = {}
+
+--- API authorization key when chatting with external models.
+-- The default value is `nil` since Ollama does not need this.
+M.api_key = nil
 
 --- Map of model names with their options.
 -- Options are tables that will be encoded into JSON before being sent to Ollama.
@@ -47,6 +89,16 @@ M.MARK_PROMPT_COLOR = 0x00CC99
 
 local json = require('ollama.dkjson')
 
+--- Constructs a curl request to string endpoint *endpoint*.
+-- POST requests should append ' -d @-' to the returned result.
+-- @param endpoint String endpoint name.
+local function curl(endpoint)
+	local headers = {}
+	if M.api_key then headers[1] = string.format('-H "Authorization: Bearer %s"', M.api_key) end
+	for k, v in pairs(M.curl_headers) do headers[#headers + 1] = string.format('-H "%s: %s"', k, v) end
+	return string.format('curl -s %s%s %s', M.url, endpoint, table.concat(headers, ' '))
+end
+
 --- Returns a buffer type for model name *model*.
 -- @param model String model name.
 local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Chat'], model) end
@@ -56,14 +108,25 @@ local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Cha
 -- @param[opt] model String model name to chat with.
 function M.chat(model)
 	if not assert_type(model, 'string/nil', 1) then
-		local p<close> = io.popen('curl -s ' .. M.url .. '/api/tags')
+		local p<close> = io.popen(curl(M.models_endpoint))
 		local response = p:read('a')
-		if response == '' then error('ollama is not running in server mode') end
+		if response == '' then error('cannot fetch model list. Is ollama running in server mode?') end
+		response = json.decode(response)
+
+		local models
+		for k, v in pairs(response) do
+			if type(v) == 'table' then
+				models = v -- assume first list result contains models
+				break
+			end
+		end
+
 		local names = {}
-		for i, mod in ipairs(json.decode(response).models) do names[i] = mod.name end
+		for i, mod in ipairs(models) do names[i] = mod[M.model_name_key] end
 		if #names == 0 then error('no local models to chat with', 2) end
 		local i = ui.dialogs.list{title = _L['Select Model'], items = names}
 		if not i then return end
+
 		model = names[i]
 	end
 
@@ -91,14 +154,15 @@ function M.prompt(input)
 		error('file is not open: ' .. filename)
 	end)
 
-	local p = os.spawn('curl -s ' .. M.url .. '/api/chat -d @-', function(output)
+	local p = os.spawn(curl(M.chat_endpoint) .. ' -d @-', function(output)
 		-- print(output)
-		local message = json.decode(output).message
-		local content = message.content or output -- in case of error
-		if content then table.insert(messages, message) end
+		local ok, message = pcall(M.chat_message, json.decode(output))
+		local content = ok and message.content or output -- in case of error
+		if ok then table.insert(messages, message) end
+
 		local type = chat_buffer_type(model)
 		local buffer = ui.print_silent_to(type) -- newline
-		buffer:annotation_clear_all() -- clear "thinking"
+		buffer:annotation_clear_all() -- clear "Thinking..."
 		ui.print_silent_to(type, content:gsub('\\n', '\n'))
 		ui.print_silent_to(type) -- newline
 	end)
@@ -147,10 +211,10 @@ events.connect(events.KEYPRESS, function(key)
 	end
 end, 1)
 
--- Unload chat model when closing the chat in order to free up memory.
+-- Unload local chat model when closing the chat in order to free up memory.
 events.connect(events.BUFFER_DELETED, function(buffer)
-	if not buffer.ollama then return end
-	local p = os.spawn('curl -s ' .. M.url .. '/api/generate -d @-')
+	if not buffer.ollama or not M.url:find('localhost') then return end
+	local p = os.spawn(curl('/api/generate') .. ' -d @-')
 	p:write(json.encode{model = buffer.ollama.model, keep_alive = 0})
 	p:close()
 end)
