@@ -7,9 +7,11 @@
 -- Install this module by copying it into your *~/.textadept/modules/* directory or Textadept's
 -- *modules/* directory, and then putting the following in your *~/.textadept/init.lua*:
 --
--- 	require('ollama')
+-- ```lua
+-- local ollama = require('ollama')
+-- ```
 --
--- Start a chat session from the Tools > Ollama > Chat... menu.
+-- Start a chat session from the "Tools > Ollama > Chat..." menu.
 --
 -- Pressing `Enter` will prompt the model with the current or selected lines. Pressing
 -- `Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
@@ -22,14 +24,16 @@
 -- You can configure this module to talk to external models that do not use the Ollama API.
 -- Here is a sample configuration to talk to an OpenAI-compatible model (tested with [LiteLLM][]):
 --
--- 	local ollama = require('ollama')
--- 	ollama.url = 'https://example.com'
--- 	ollama.models_endpoint = '/models'
--- 	ollama.model_name_key = 'id'
--- 	ollama.chat_endpoint = '/chat/completions'
--- 	ollama.chat_message = function(response) return response.choices[1].message end
--- 	ollama.curl_headers = {['Content-Type'] = 'application/json'}
--- 	ollama.api_key = 'API_KEY'
+-- ```lua
+-- local ollama = require('ollama')
+-- ollama.url = 'https://example.com'
+-- ollama.models_endpoint = '/models'
+-- ollama.model_name_key = 'id'
+-- ollama.chat_endpoint = '/chat/completions'
+-- ollama.chat_message = function(response) return response.choices[1].message end
+-- ollama.curl_headers = {['Content-Type'] = 'application/json'}
+-- ollama.api_key = 'API_KEY'
+-- ```
 --
 -- [LiteLLM]: https://docs.litellm.ai/
 -- @module ollama
@@ -89,9 +93,9 @@ M.MARK_PROMPT_COLOR = 0x00CC99
 
 local json = require('ollama.dkjson')
 
---- Constructs a curl request to string endpoint *endpoint*.
+--- Constructs a curl request to an endpoint.
 -- POST requests should append ' -d @-' to the returned result.
--- @param endpoint String endpoint name.
+-- @param endpoint String endpoint name to send the request to.
 local function curl(endpoint)
 	local headers = {}
 	if M.api_key then headers[1] = string.format('-H "Authorization: Bearer %s"', M.api_key) end
@@ -99,13 +103,12 @@ local function curl(endpoint)
 	return string.format('curl -s %s%s %s', M.url, endpoint, table.concat(headers, ' '))
 end
 
---- Returns a buffer type for model name *model*.
+--- Returns a buffer type for a model.
 -- @param model String model name.
 local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Chat'], model) end
 
---- Opens a new chat session with model name *model*, or the user-selected model if none was
--- given.
--- @param[opt] model String model name to chat with.
+--- Opens a new chat session with a model.
+-- @param[opt] model String model name to chat with. If `nil`, the user is prompted for one.
 function M.chat(model)
 	if not assert_type(model, 'string/nil', 1) then
 		local p<close> = io.popen(curl(M.models_endpoint))
@@ -135,10 +138,10 @@ function M.chat(model)
 	buffer.ollama = {model = model, messages = {}}
 end
 
---- Prompts the current chat model with string *input*.
--- Any `@filename` references are replaced with their file's contents.
--- Prints whatever the model responds with when it finishes thinking.
--- @param input String input to prompt with.
+--- Prompts the current chat model with input.
+-- A model's response will be printed when it finishes thinking.
+-- @param input String input to prompt with. Any '@*filename*' references are replaced with
+--	their file's contents.
 function M.prompt(input)
 	assert_type(input, 'string', 1)
 	if not buffer.ollama then error('can only prompt inside chat buffer', 2) end
