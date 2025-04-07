@@ -48,6 +48,13 @@ The marker number for prompt lines.
 
 The color of prompt markers.
 
+<a id="events.MODEL_RESPONSE"></a>
+## `events.MODEL_RESPONSE`
+
+Emitted after a model responds.
+
+This could be used to provied a notification after a long thinking window.
+
 <a id="ollama.api_key"></a>
 ## `ollama.api_key`
 
@@ -78,7 +85,7 @@ Function to extract the message from the REST response for `chat_endpoint`.
 This should only be changed if you are not using Ollama.
 
 Parameters:
-- *response*:
+- *response*:  Table containing a model response.
 
 <a id="ollama.curl_headers"></a>
 ## `ollama.curl_headers`

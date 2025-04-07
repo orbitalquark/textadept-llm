@@ -69,6 +69,7 @@ M.chat_endpoint = '/api/chat'
 
 --- Function to extract the message from the REST response for `chat_endpoint`.
 -- This should only be changed if you are not using Ollama.
+-- @param response Table containing a model response.
 M.chat_message = function(response) return response.message end
 
 --- Optional map of HTTP headers to send with curl requests to an external model.
@@ -92,6 +93,12 @@ M.MARK_PROMPT = view.new_marker_number()
 M.MARK_PROMPT_COLOR = 0x00CC99
 
 local json = require('ollama.dkjson')
+
+events.MODEL_RESPONSE = 'model_response'
+
+--- Emitted after a model responds.
+-- This could be used to provied a notification after a long thinking window.
+-- @field _G.events.MODEL_RESPONSE
 
 --- Constructs a curl request to an endpoint.
 -- POST requests should append ' -d @-' to the returned result.
@@ -168,6 +175,7 @@ function M.prompt(input)
 		buffer:annotation_clear_all() -- clear "Thinking..."
 		ui.print_silent_to(type, content:gsub('\\n', '\n'))
 		ui.print_silent_to(type) -- newline
+		events.emit(events.MODEL_RESPONSE)
 	end)
 
 	local message = {role = 'user', content = input}
