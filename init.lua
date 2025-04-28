@@ -131,8 +131,7 @@ function M.chat(model)
 			end
 		end
 
-		local names = {}
-		for i, mod in ipairs(models) do names[i] = mod[M.model_name_key] end
+		local names = table.map(model, function(mod) return mod[M.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
 		local i = ui.dialogs.list{title = _L['Select Model'], items = names}
 		if not i then return end
