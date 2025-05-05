@@ -124,14 +124,14 @@ function M.chat(model)
 		response = json.decode(response)
 
 		local models
-		for k, v in pairs(response) do
+		for _, v in pairs(response) do
 			if type(v) == 'table' then
 				models = v -- assume first list result contains models
 				break
 			end
 		end
 
-		local names = table.map(model, function(mod) return mod[M.model_name_key] end)
+		local names = table.map(models, function(mod) return mod[M.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
 		local i = ui.dialogs.list{title = _L['Select Model'], items = names}
 		if not i then return end
