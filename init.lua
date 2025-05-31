@@ -45,7 +45,7 @@ if not rawget(_L, 'Ollama') then
 	_L['Chat'] = 'Chat'
 	_L['Select Model'] = 'Select Model'
 	_L['Chatting with'] = 'Chatting with'
-	_L['Thinking...'] = 'Thinking...'
+	_L['Awaiting response...'] = 'Awaiting response...'
 	_L['Select Context File'] = 'Select Context File'
 	_L['Chat...'] = 'Chat...'
 end
@@ -80,11 +80,13 @@ M.curl_headers = {}
 -- The default value is `nil` since Ollama does not need this.
 M.api_key = nil
 
+--- Whether models with thinking capabilities should think before responding.
+-- The default value is `false`.
+M.think = false
+
 --- Map of model names with their options.
 -- Options are tables that will be encoded into JSON before being sent to Ollama.
-M.model_options = {
-	['deepseek-coder-v2:16b'] = {num_ctx = 4096}
-}
+M.model_options = {}
 
 --- The marker number for prompt lines.
 M.MARK_PROMPT = view.new_marker_number()
@@ -97,7 +99,7 @@ local json = require('ollama.dkjson')
 events.MODEL_RESPONSE = 'model_response'
 
 --- Emitted after a model responds.
--- This could be used to provied a notification after a long thinking window.
+-- This could be used to provide a notification after a long wait time.
 -- @field _G.events.MODEL_RESPONSE
 
 --- Constructs a curl request to an endpoint.
@@ -145,7 +147,7 @@ function M.chat(model)
 end
 
 --- Prompts the current chat model with input.
--- A model's response will be printed when it finishes thinking.
+-- A model's response will be printed when it is received.
 -- @param input String input to prompt with. Any '@*filename*' references are replaced with
 --	their file's contents.
 function M.prompt(input)
@@ -171,7 +173,7 @@ function M.prompt(input)
 
 		local type = chat_buffer_type(model)
 		local buffer = ui.print_silent_to(type) -- newline
-		buffer:annotation_clear_all() -- clear "Thinking..."
+		buffer:annotation_clear_all() -- clear "Awaiting response..."
 		ui.print_silent_to(type, content:gsub('\\n', '\n'))
 		ui.print_silent_to(type) -- newline
 		events.emit(events.MODEL_RESPONSE)
@@ -180,11 +182,12 @@ function M.prompt(input)
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
 	p:write(json.encode{
-		model = model, messages = messages, stream = false, options = M.model_options[model]
+		model = model, messages = messages, stream = false, think = M.think,
+		options = M.model_options[model]
 	})
 	p:close()
 	-- print(json.encode(data))
-	buffer.annotation_text[buffer.line_count] = _L['Thinking...']
+	buffer.annotation_text[buffer.line_count] = _L['Awaiting response...']
 end
 
 -- Respond to keypresses in a chat buffer.

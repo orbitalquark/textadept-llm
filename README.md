@@ -53,7 +53,7 @@ The color of prompt markers.
 
 Emitted after a model responds.
 
-This could be used to provied a notification after a long thinking window.
+This could be used to provide a notification after a long wait time.
 
 <a id="ollama.api_key"></a>
 ## `ollama.api_key`
@@ -120,11 +120,18 @@ The default value is '/api/tags' and should only be changed if you are not using
 
 Prompts the current chat model with input.
 
-A model's response will be printed when it finishes thinking.
+A model's response will be printed when it is received.
 
 Parameters:
 - *input*:  String input to prompt with. Any '@*filename*' references are replaced with
 	their file's contents.
+
+<a id="ollama.think"></a>
+## `ollama.think`
+
+Whether models with thinking capabilities should think before responding.
+
+The default value is `false`.
 
 <a id="ollama.url"></a>
 ## `ollama.url`
