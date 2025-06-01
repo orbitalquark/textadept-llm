@@ -169,6 +169,7 @@ function M.prompt(input)
 	if not buffer.ollama then error('can only prompt inside chat buffer', 2) end
 	local model, messages = buffer.ollama.model, buffer.ollama.messages
 
+	-- Replace @filename references with their file contents.
 	input = input:gsub('@(%S+)', function(filename)
 		filename = filename:gsub('%p$', '') -- strip trailing punctuation like '.' or ','
 		for _, buffer in ipairs(_BUFFERS) do
@@ -176,7 +177,7 @@ function M.prompt(input)
 				return string.format('```\n%s\n```', buffer:get_text())
 			end
 		end
-		error('file is not open: ' .. filename)
+		if lfs.attributes(filename) then error('file is not open: ' .. filename) end
 	end)
 
 	-- Outputs the chat response content from an incoming line of JSON output.
@@ -253,6 +254,7 @@ events.connect(events.KEYPRESS, function(key)
 		buffer:new_line()
 		return true
 	elseif key == '@' then
+		buffer:add_text('@')
 		local filenames = {}
 		local select = 1
 		local other_view = #_VIEWS == 2 and _VIEWS[view == _VIEWS[2] and 1 or 2]
@@ -264,8 +266,9 @@ events.connect(events.KEYPRESS, function(key)
 			end
 			::continue::
 		end
+		if #filenames == 0 then return true end
 		local i = ui.dialogs.list{title = _L['Select Context File'], items = filenames, select = select}
-		if i then buffer:add_text('@' .. filenames[i]) end
+		if i then buffer:add_text(filenames[i]) end
 		return true
 	end
 end, 1)
