@@ -30,7 +30,10 @@
 -- ollama.models_endpoint = '/models'
 -- ollama.model_name_key = 'id'
 -- ollama.chat_endpoint = '/chat/completions'
--- ollama.chat_message = function(response) return response.choices[1].message end
+-- ollama.chat_message = function(response)
+-- 	return response.choices[1].message or response.choices[1].delta
+-- end
+-- ollama.done = function(response) return not response.choices[1].delta.content end
 -- ollama.curl_headers = {['Content-Type'] = 'application/json'}
 -- ollama.api_key = 'API_KEY'
 -- ```
@@ -72,6 +75,11 @@ M.chat_endpoint = '/api/chat'
 -- @param response Table containing a model response.
 M.chat_message = function(response) return response.message end
 
+--- Function that returns whether or not a REST response from `chat_endpoint` is done streaming.
+-- This should only be changed if you are not using Ollama.
+-- @param response Table containing a streamed model response.
+M.done = function(response) return response.done end
+
 --- Optional map of HTTP headers to send with curl requests to an external model.
 -- The default value is an empty map since Ollama does not need any headers.
 M.curl_headers = {}
@@ -79,6 +87,10 @@ M.curl_headers = {}
 --- API authorization key when chatting with external models.
 -- The default value is `nil` since Ollama does not need this.
 M.api_key = nil
+
+--- Whether or not to stream model responses in real-time.
+-- The default value is `true`.
+M.stream = true
 
 --- Whether models with thinking capabilities should think before responding.
 -- The default value is `false`.
@@ -98,7 +110,7 @@ local json = require('ollama.dkjson')
 
 events.MODEL_RESPONSE = 'model_response'
 
---- Emitted after a model responds.
+--- Emitted after a model is finished responding.
 -- This could be used to provide a notification after a long wait time.
 -- @field _G.events.MODEL_RESPONSE
 
@@ -109,7 +121,8 @@ local function curl(endpoint)
 	local headers = {}
 	if M.api_key then headers[1] = string.format('-H "Authorization: Bearer %s"', M.api_key) end
 	for k, v in pairs(M.curl_headers) do headers[#headers + 1] = string.format('-H "%s: %s"', k, v) end
-	return string.format('curl -s %s%s %s', M.url, endpoint, table.concat(headers, ' '))
+	return string.format('curl -s %s %s%s %s', M.stream and '-N' or '', M.url, endpoint,
+		table.concat(headers, ' '))
 end
 
 --- Returns a buffer type for a model.
@@ -152,6 +165,7 @@ end
 --	their file's contents.
 function M.prompt(input)
 	assert_type(input, 'string', 1)
+	local buffer = buffer
 	if not buffer.ollama then error('can only prompt inside chat buffer', 2) end
 	local model, messages = buffer.ollama.model, buffer.ollama.messages
 
@@ -165,28 +179,60 @@ function M.prompt(input)
 		error('file is not open: ' .. filename)
 	end)
 
-	local p = os.spawn(curl(M.chat_endpoint) .. ' -d @-', function(output)
-		-- print(output)
-		local ok, message = pcall(M.chat_message, json.decode(output))
-		local content = ok and message.content or output -- in case of error
-		if ok then table.insert(messages, message) end
+	-- Outputs the chat response content from an incoming line of JSON output.
+	-- @param line String JSON line.
+	local function process_line(line)
+		-- print('Process:', line)
+		local response = json.decode(line)
+		local ok, message = pcall(M.chat_message, response)
+		local content = ok and message.content or line -- in case of error
+		if ok then
+			local last_message = messages[#messages]
+			if M.stream and last_message.role ~= 'user' then
+				last_message.content = last_message.content .. content -- combine
+			else
+				table.insert(messages, message)
+				buffer:append_text('\n')
+				buffer:annotation_clear_all() -- clear "Awaiting response..."
+			end
+		end
 
-		local type = chat_buffer_type(model)
-		local buffer = ui.print_silent_to(type) -- newline
-		buffer:annotation_clear_all() -- clear "Awaiting response..."
-		ui.print_silent_to(type, content:gsub('\\n', '\n'))
-		ui.print_silent_to(type) -- newline
+		buffer:append_text(content:gsub('\\n', '\n'))
+		for _, view in ipairs(_VIEWS) do
+			if view.buffer == buffer then view:document_end() end -- scroll current and other views
+		end
+
+		if M.stream then
+			local ok, done = pcall(M.done, response)
+			if ok and not done then return end
+		end
+		-- Note: use ui.print_silent_to() for updating scroll position.
+		ui.print_silent_to(chat_buffer_type(model), '\n') -- double newline
+		if response.eval_count then
+			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
+		end
 		events.emit(events.MODEL_RESPONSE)
+	end
+
+	local stream_buffer = ''
+	local p = os.spawn(curl(M.chat_endpoint) .. ' -d @-', function(output)
+		-- print('Receive:', output)
+		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
+		repeat
+			output, stream_buffer = stream_buffer:match('^([^\r\n]+)\r?\n(.*)$')
+			process_line(output)
+		until not stream_buffer:find('\n')
 	end)
 
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
-	p:write(json.encode{
-		model = model, messages = messages, stream = false, think = M.think,
+	local data = json.encode{
+		model = model, messages = messages, stream = M.stream, think = M.think,
 		options = M.model_options[model]
-	})
+	}
+	-- print('Send:', data)
+	p:write(data)
 	p:close()
-	-- print(json.encode(data))
 	buffer.annotation_text[buffer.line_count] = _L['Awaiting response...']
 end
 

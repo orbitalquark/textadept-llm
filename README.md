@@ -31,7 +31,10 @@ ollama.url = 'https://example.com'
 ollama.models_endpoint = '/models'
 ollama.model_name_key = 'id'
 ollama.chat_endpoint = '/chat/completions'
-ollama.chat_message = function(response) return response.choices[1].message end
+ollama.chat_message = function(response)
+	return response.choices[1].message or response.choices[1].delta
+end
+ollama.done = function(response) return not response.choices[1].delta.content end
 ollama.curl_headers = {['Content-Type'] = 'application/json'}
 ollama.api_key = 'API_KEY'
 ```
@@ -51,7 +54,7 @@ The color of prompt markers.
 <a id="events.MODEL_RESPONSE"></a>
 ## `events.MODEL_RESPONSE`
 
-Emitted after a model responds.
+Emitted after a model is finished responding.
 
 This could be used to provide a notification after a long wait time.
 
@@ -94,6 +97,16 @@ Optional map of HTTP headers to send with curl requests to an external model.
 
 The default value is an empty map since Ollama does not need any headers.
 
+<a id="ollama.done"></a>
+## `ollama.done`(*response*)
+
+Function that returns whether or not a REST response from `chat_endpoint` is done streaming.
+
+This should only be changed if you are not using Ollama.
+
+Parameters:
+- *response*:  Table containing a streamed model response.
+
 <a id="ollama.model_name_key"></a>
 ## `ollama.model_name_key`
 
@@ -125,6 +138,13 @@ A model's response will be printed when it is received.
 Parameters:
 - *input*:  String input to prompt with. Any '@*filename*' references are replaced with
 	their file's contents.
+
+<a id="ollama.stream"></a>
+## `ollama.stream`
+
+Whether or not to stream model responses in real-time.
+
+The default value is `true`.
 
 <a id="ollama.think"></a>
 ## `ollama.think`
