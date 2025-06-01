@@ -47,6 +47,8 @@ if not rawget(_L, 'Ollama') then
 	_L['Ollama'] = 'Ollama'
 	_L['Chat'] = 'Chat'
 	_L['Select Model'] = 'Select Model'
+	_L['Set system prompt...'] = 'Set system prompt...'
+	_L['System Prompt'] = 'System Prompt'
 	_L['Chatting with'] = 'Chatting with'
 	_L['Awaiting response...'] = 'Awaiting response...'
 	_L['Select Context File'] = 'Select Context File'
@@ -131,7 +133,9 @@ local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Cha
 
 --- Opens a new chat session with a model.
 -- @param[opt] model String model name to chat with. If `nil`, the user is prompted for one.
-function M.chat(model)
+-- @param[opt] system_prompt String system prompt to use for *model*. If both this and *model*
+--	are `nil`, the user has the option to specify a system prompt in the model prompt.
+function M.chat(model, system_prompt)
 	if not assert_type(model, 'string/nil', 1) then
 		local p<close> = io.popen(curl(M.models_endpoint))
 		local response = p:read('a')
@@ -148,8 +152,12 @@ function M.chat(model)
 
 		local names = table.map(models, function(mod) return mod[M.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
-		local i = ui.dialogs.list{title = _L['Select Model'], items = names}
-		if not i then return end
+		local i, button = ui.dialogs.list{
+			title = _L['Select Model'], items = names, button3 = _L['Set system prompt...'],
+			return_button = true
+		}
+		if button == 3 then system_prompt = ui.dialogs.input{title = _L['System Prompt']} end
+		if not i or button == 2 then return end
 
 		model = names[i]
 	end
@@ -157,6 +165,10 @@ function M.chat(model)
 	ui.print_to(chat_buffer_type(model), string.format('%s %s', _L['Chatting with'], model))
 	buffer:set_lexer('markdown')
 	buffer.ollama = {model = model, messages = {}}
+	if assert_type(system_prompt, 'string/nil', 2) and system_prompt ~= '' then
+		ui.print_to(chat_buffer_type(model), string.format('%s: %s', _L['System Prompt'], system_prompt))
+		buffer.ollama.messages[1] = {role = 'system', content = system_prompt}
+	end
 end
 
 --- Prompts the current chat model with input.

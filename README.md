@@ -66,12 +66,14 @@ API authorization key when chatting with external models.
 The default value is `nil` since Ollama does not need this.
 
 <a id="ollama.chat"></a>
-## `ollama.chat`([*model*])
+## `ollama.chat`([*model*[, *system_prompt*]])
 
 Opens a new chat session with a model.
 
 Parameters:
 - *model*:  String model name to chat with. If `nil`, the user is prompted for one.
+- *system_prompt*:  String system prompt to use for *model*. If both this and *model*
+	are `nil`, the user has the option to specify a system prompt in the model prompt.
 
 <a id="ollama.chat_endpoint"></a>
 ## `ollama.chat_endpoint`
