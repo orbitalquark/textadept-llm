@@ -43,19 +43,6 @@
 -- @module ollama
 local M = {}
 
-local _L = _L
-if not rawget(_L, 'Ollama') then
-	_L['Ollama'] = 'Ollama'
-	_L['Chat'] = 'Chat'
-	_L['Select Model'] = 'Select Model'
-	_L['Set system prompt...'] = 'Set system prompt...'
-	_L['System Prompt'] = 'System Prompt'
-	_L['Chatting with'] = 'Chatting with'
-	_L['Awaiting response...'] = 'Awaiting response...'
-	_L['Select Context File'] = 'Select Context File'
-	_L['Chat...'] = 'Chat...'
-end
-
 --- URL Ollama is running on (http://host:port).
 -- The default value is `http://localhost:11434` and should only be changed if Ollama is running on
 -- a different port, or if you are not using Ollama.
@@ -303,6 +290,8 @@ end)
 
 -- Add a menu.
 -- (Insert 'Ollama' menu in alphabetical order.)
+_L['Ollama'] = 'Ollam_a'
+_L['Chat...'] = '_Chat...'
 local m_tools = textadept.menu.menubar['Tools']
 local found_area
 for i = 1, #m_tools - 1 do
