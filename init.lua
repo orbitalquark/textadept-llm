@@ -198,32 +198,30 @@ function M.prompt(input)
 	-- @param line String JSON line.
 	local function process_line(line)
 		-- print('Process:', line)
-		if line:find('%[DONE%]') then return end -- OpenAI stream sentinel
+		if line:find('^%s*%[DONE%]') then return end -- OpenAI stream sentinel
 		local response = json.decode(line)
 		local ok, message = pcall(M.chat_message, response)
-		local content = ok and message.content or ''
+		local content = ok and (message.content or '') or
+			string.format('error procesing line `%s`: %s', line, message)
 		if ok then
 			local last_message = messages[#messages]
 			if M.stream and last_message.role ~= 'user' then
 				last_message.content = last_message.content .. content -- combine
 			else
 				table.insert(messages, message)
-				buffer:append_text('\n')
+				buffer:add_text('\n')
 				buffer:annotation_clear_all() -- clear "Awaiting response..."
 			end
 		end
 
-		buffer:append_text(content:gsub('\\n', '\n'))
-		for _, view in ipairs(_VIEWS) do
-			if view.buffer == buffer then view:document_end() end -- scroll current and other views
-		end
+		buffer:set_empty_selection(buffer.length + 1)
+		buffer:add_text(content:gsub('\\n', '\n'))
 
 		if M.stream then
 			local ok, done = pcall(M.done, response)
 			if ok and not done then return end
 		end
-		-- Note: use ui.print_silent_to() for updating scroll position.
-		ui.print_silent_to(chat_buffer_type(model), '\n') -- double newline
+		buffer:add_text('\n\n')
 		if response.eval_count then
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
 		end
