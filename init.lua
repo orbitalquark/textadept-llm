@@ -36,6 +36,7 @@
 -- ollama.done = function(response) return not response.choices[1].delta.content end
 -- ollama.curl_headers = {['Content-Type'] = 'application/json'}
 -- ollama.api_key = 'API_KEY'
+-- ollama.think = nil -- avoid sending this parameter to the endpoint
 -- ```
 --
 -- [LiteLLM]: https://docs.litellm.ai/
@@ -95,6 +96,7 @@ M.api_key = nil
 M.stream = true
 
 --- Whether models with thinking capabilities should think before responding.
+-- Use `nil` if your chat endpoint does not support this parameter.
 -- The default value is `false`.
 M.think = false
 
@@ -196,9 +198,10 @@ function M.prompt(input)
 	-- @param line String JSON line.
 	local function process_line(line)
 		-- print('Process:', line)
+		if line:find('%[DONE%]') then return end -- OpenAI stream sentinel
 		local response = json.decode(line)
 		local ok, message = pcall(M.chat_message, response)
-		local content = ok and message.content or line -- in case of error
+		local content = ok and message.content or ''
 		if ok then
 			local last_message = messages[#messages]
 			if M.stream and last_message.role ~= 'user' then
@@ -232,7 +235,8 @@ function M.prompt(input)
 		-- print('Receive:', output)
 		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
 		repeat
-			output, stream_buffer = stream_buffer:match('^([^\r\n]+)\r?\n(.*)$')
+			output, stream_buffer = stream_buffer:match('^([^\r\n]+)[\r\n]*(.*)$')
+			output = output:gsub('^data:', '') -- OpenAI does not stream pure JSON objects
 			process_line(output)
 		until not stream_buffer:find('\n')
 	end)
