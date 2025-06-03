@@ -244,7 +244,7 @@ end
 events.connect(events.KEYPRESS, function(key)
 	if ui.command_entry.active then return end
 	if not buffer.ollama then return end
-	if key == '\n' then
+	if key == '\n' and not buffer:auto_c_active() then
 		textadept.editing.select_line()
 		local input = buffer:get_sel_text()
 		M.prompt(input)
