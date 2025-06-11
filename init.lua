@@ -181,6 +181,9 @@ function M.prompt(input)
 		if lfs.attributes(filename) then error('file is not open: ' .. filename) end
 	end)
 
+	-- Keep track of the first line of the incoming response so autoscrolling does not skip past it.
+	local top_line = buffer:line_from_position(buffer.current_pos) + 1
+
 	-- Outputs the chat response content from an incoming line of JSON output.
 	-- @param line String JSON line.
 	local function process_line(line)
@@ -203,6 +206,11 @@ function M.prompt(input)
 
 		buffer:set_empty_selection(buffer.length + 1)
 		buffer:add_text(content:gsub('\\n', '\n'))
+		if view.buffer == buffer then
+			local response_lines = view:visible_from_doc_line(buffer.line_count) -
+				view:visible_from_doc_line(top_line)
+			if response_lines <= view.lines_on_screen then view:line_scroll_down() end -- auto-scroll
+		end
 
 		if M.stream then
 			local ok, done = pcall(M.done, response)
