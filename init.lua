@@ -1,4 +1,4 @@
--- Copyright 2025 Mitchell. See LICENSE.
+-- Copyright 2025-2026 Mitchell. See LICENSE.
 
 --- Chat with local [Ollama][] models using Textadept.
 -- Requires Ollama and `curl` to be installed, and Ollama needs to be running in server mode
