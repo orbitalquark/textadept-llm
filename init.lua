@@ -142,8 +142,8 @@ function M.chat(model, system_prompt)
 		local names = table.map(models, function(mod) return mod[M.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
 		local i, button = ui.dialogs.list{
-			title = _L['Select Model'], items = names, button3 = _L['Set system prompt...'],
-			return_button = true
+			title = _L['Select Model'], items = names, button2 = _L['Cancel'],
+			button3 = _L['Set system prompt...'], return_button = true
 		}
 		if button == 3 then system_prompt = ui.dialogs.input{title = _L['System Prompt']} end
 		if not i or button == 2 then return end
