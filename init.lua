@@ -1,95 +1,104 @@
 -- Copyright 2025-2026 Mitchell. See LICENSE.
 
---- Chat with local [Ollama][] models using Textadept.
--- Requires Ollama and `curl` to be installed, and Ollama needs to be running in server mode
--- with one or more local models available.
+--- Chat with Large Language Models (LLMs a.k.a. AI) using Textadept.
+-- Requires `curl` to be installed. This module can interact with local LLM servers like
+-- [mlx_lm][] or [Ollama][], and remote LLM servers like [LiteLLM][]. Local LLM servers need
+-- to be running with one or more local models available.
 --
 -- Install this module by copying it into your *~/.textadept/modules/* directory or Textadept's
 -- *modules/* directory, and then putting the following in your *~/.textadept/init.lua*:
 --
 -- ```lua
--- local ollama = require('ollama')
+-- local llm = require('llm')
 -- ```
 --
--- Start a chat session from the "Tools > Ollama > Chat..." menu.
+-- Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
 --
 -- Pressing `Enter` will prompt the model with the current or selected lines. Pressing
 -- `Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
 -- an open file to inline as context to the model prompt.
 --
+-- [mlx_lm]: https://github.com/ml-explore/mlx-lm
 -- [Ollama]: https://ollama.com/
+-- [LiteLLM]: https://docs.litellm.ai/
 --
 -- ## Chatting with external models
 --
--- You can configure this module to talk to external models that do not use the Ollama API.
--- Here is a sample configuration to talk to an OpenAI-compatible model (tested with [LiteLLM][]):
+-- You can configure this module to talk to external models that use an OpenAI-compatible or
+-- Ollama-compatible API. For example:
 --
 -- ```lua
--- local ollama = require('ollama')
--- ollama.url = 'https://example.com'
--- ollama.models_endpoint = '/models'
--- ollama.model_name_key = 'id'
--- ollama.chat_endpoint = '/chat/completions'
--- ollama.chat_message = function(response)
--- 	return response.choices[1].message or response.choices[1].delta
--- end
--- ollama.done = function(response) return not response.choices[1].delta.content end
--- ollama.curl_headers = {['Content-Type'] = 'application/json'}
--- ollama.api_key = 'API_KEY'
--- ollama.think = nil -- avoid sending this parameter to the endpoint
+-- local llm = require('llm')
+-- local config = llm.configs.litellm
+-- config.url = 'https://dev.example.com'
+-- config.api_key = 'API_KEY'
+-- llm.config = config
 -- ```
---
--- [LiteLLM]: https://docs.litellm.ai/
--- @module ollama
+-- @module llm
 local M = {}
 
---- URL Ollama is running on (http://host:port).
--- The default value is `http://localhost:11434` and should only be changed if Ollama is running on
--- a different port, or if you are not using Ollama.
-M.url = 'http://localhost:11434'
+--- Configurations for various LLM servers.
+-- @see config
+M.configs = {
+	ollama = {
+		url = 'http://localhost:11434', --
+		models_endpoint = '/api/tags', --
+		model_name_key = 'name', --
+		chat_endpoint = '/api/chat', --
+		chat_message = function(response) return response.message end,
+		done = function(response) return response.done end, --
+		curl_headers = {}, --
+		stream = true, --
+		think = false --
+	}, --
+	litellm = {
+		url = 'https://example.com/v1', --
+		models_endpoint = '/models', --
+		model_name_key = 'id', --
+		chat_endpoint = '/chat/completions', --
+		chat_message = function(response)
+			return response.choices[1].delta or response.choices[1].message
+		end, --
+		done = function(response) return not response.choices[1].delta.content end,
+		curl_headers = {['Content-Type'] = 'application/json'}, --
+		api_key = 'API_KEY', --
+		stream = true, --
+		think = nil -- unsupported
+	}, --
+	mlx_lm = {
+		url = 'http://localhost:8080/v1', --
+		models_endpoint = '/models', --
+		model_name_key = 'id', --
+		chat_endpoint = '/chat/completions', --
+		chat_message = function(response)
+			return response.choices[1].delta or response.choices[1].message
+		end, --
+		done = function(response) return response.choices[1].delta.content == "" end,
+		curl_headers = {['Content-Type'] = 'application/json'}, --
+		stream = true, --
+		think = false
+	}
+}
 
---- REST endpoint for fetching a list of available models.
--- The default value is '/api/tags' and should only be changed if you are not using Ollama.
-M.models_endpoint = '/api/tags'
-
---- The key whose value is the model name for each model in the REST response for `models_endpoint`.
--- The default value is 'name' and should only be changed if you are not using Ollama.
-M.model_name_key = 'name'
-
---- REST endpoint for chatting with a model.
--- The default value is '/api/chat' and should only be changed if you are not using Ollama.
-M.chat_endpoint = '/api/chat'
-
---- Function to extract the message from the REST response for `chat_endpoint`.
--- This should only be changed if you are not using Ollama.
--- @param response Table containing a model response.
-M.chat_message = function(response) return response.message end
-
---- Function that returns whether or not a REST response from `chat_endpoint` is done streaming.
--- This should only be changed if you are not using Ollama.
--- @param response Table containing a streamed model response.
-M.done = function(response) return response.done end
-
---- Optional map of HTTP headers to send with curl requests to an external model.
--- The default value is an empty map since Ollama does not need any headers.
-M.curl_headers = {}
-
---- API authorization key when chatting with external models.
--- The default value is `nil` since Ollama does not need this.
-M.api_key = nil
-
---- Whether or not to stream model responses in real-time.
--- The default value is `true`.
-M.stream = true
-
---- Whether models with thinking capabilities should think before responding.
--- Use `nil` if your chat endpoint does not support this parameter.
--- The default value is `false`.
-M.think = false
-
---- Map of model names with their options.
--- Options are tables that will be encoded into JSON before being sent to Ollama.
-M.model_options = {}
+--- The config table in `configs` to use.
+-- Note: you may still have to configure things like the URL and API key.
+-- @field url String URL and port the server is running on.
+-- @field models_endpoint String REST endpoint that returns list of available models.
+-- @field model_name_key String key whose value is the model name for each model in the REST
+--	response for `models_endpoint`.
+-- @field chat_endpoint String REST endpoint for chatting with a model.
+-- @field chat_message Function that accepts a REST response table from`chat_endpoint` and
+--	returns its message object (not a string).
+-- @field done Function that accepts a REST streaming response table from `chat_endpoint`
+--	and returns whether or not that endpoint is done streaming.
+-- @field curl_headers Optional map of HTTP headers to send with curl requests to the server.
+-- @field api_key Optional string API authorization key for the server.
+-- @field stream Whether or not to stream server responses in real-time.
+-- @field think Whether or not to enable thinking for models that support it. Use `nil` if the
+--	server does not support this option.
+-- @usage llm.config = llm.configs.ollama
+-- @class table
+M.config = M.configs.mlx_lm
 
 --- The marker number for prompt lines.
 M.MARK_PROMPT = view.new_marker_number()
@@ -97,7 +106,7 @@ M.MARK_PROMPT = view.new_marker_number()
 --- The color of prompt markers.
 M.MARK_PROMPT_COLOR = 0x00CC99
 
-local json = require('ollama.dkjson')
+local json = require('llm.dkjson')
 
 events.MODEL_RESPONSE = 'model_response'
 
@@ -113,9 +122,13 @@ events.MODEL_RESPONSE = 'model_response'
 -- @param endpoint String endpoint name to send the request to.
 local function curl(endpoint)
 	local headers = {}
-	if M.api_key then headers[1] = string.format('-H "Authorization: Bearer %s"', M.api_key) end
-	for k, v in pairs(M.curl_headers) do headers[#headers + 1] = string.format('-H "%s: %s"', k, v) end
-	return string.format('curl -s %s %s%s %s', M.stream and '-N' or '', M.url, endpoint,
+	if M.config.api_key then
+		headers[1] = string.format('-H "Authorization: Bearer %s"', M.config.api_key)
+	end
+	for k, v in pairs(M.config.curl_headers) do
+		headers[#headers + 1] = string.format('-H "%s: %s"', k, v)
+	end
+	return string.format('curl -s %s %s%s %s', M.config.stream and '-N' or '', M.config.url, endpoint,
 		table.concat(headers, ' '))
 end
 
@@ -129,9 +142,9 @@ local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Cha
 --	are `nil`, the user has the option to specify a system prompt in the model prompt.
 function M.chat(model, system_prompt)
 	if not assert_type(model, 'string/nil', 1) then
-		local p<close> = io.popen(curl(M.models_endpoint))
+		local p<close> = io.popen(curl(M.config.models_endpoint))
 		local response = p:read('a')
-		if response == '' then error('cannot fetch model list. Is ollama running in server mode?') end
+		if response == '' then error('cannot fetch model list. Is the LLM server running?') end
 		response = json.decode(response)
 
 		local models
@@ -142,7 +155,7 @@ function M.chat(model, system_prompt)
 			end
 		end
 
-		local names = table.map(models, function(mod) return mod[M.model_name_key] end)
+		local names = table.map(models, function(mod) return mod[M.config.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
 		local i, button = ui.dialogs.list{
 			title = _L['Select Model'], items = names, button2 = _L['Cancel'],
@@ -156,10 +169,10 @@ function M.chat(model, system_prompt)
 
 	ui.print_to(chat_buffer_type(model), string.format('%s %s', _L['Chatting with'], model))
 	buffer:set_lexer('markdown')
-	buffer.ollama = {model = model, messages = {}}
+	buffer.llm = {model = model, messages = {}}
 	if assert_type(system_prompt, 'string/nil', 2) and system_prompt ~= '' then
 		ui.print_to(chat_buffer_type(model), string.format('%s: %s', _L['System Prompt'], system_prompt))
-		buffer.ollama.messages[1] = {role = 'system', content = system_prompt}
+		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
 end
 
@@ -170,8 +183,8 @@ end
 function M.prompt(input)
 	assert_type(input, 'string', 1)
 	local buffer = buffer
-	if not buffer.ollama then error('can only prompt inside chat buffer', 2) end
-	local model, messages = buffer.ollama.model, buffer.ollama.messages
+	if not buffer.llm then error('can only prompt inside chat buffer', 2) end
+	local model, messages = buffer.llm.model, buffer.llm.messages
 
 	-- Replace @filename references with their file contents.
 	input = input:gsub('@(%S+)', function(filename)
@@ -187,18 +200,30 @@ function M.prompt(input)
 	-- Keep track of the first line of the incoming response so autoscrolling does not skip past it.
 	local top_line = buffer:line_from_position(buffer.current_pos) + 1
 
+	-- Some models still output think tags, even when thinking is turned off. Do not print them.
+	local thinking = false
+
 	-- Outputs the chat response content from an incoming line of JSON output.
 	-- @param line String JSON line.
 	local function process_line(line)
 		-- print('Process:', line)
 		if line:find('^%s*%[DONE%]') then return end -- OpenAI stream sentinel
+		if line:find('keepalive %d+/%d+') then return end -- mlx_lm.server placeholder
 		local response = json.decode(line)
-		local ok, message = pcall(M.chat_message, response)
+		local ok, message = pcall(M.config.chat_message, response)
 		local content = ok and (message.content or '') or
-			string.format('error procesing line `%s`: %s', line, message)
+			string.format('error processing line `%s`: %s', line, message)
 		if ok then
+			if not M.config.think and (content:find('</?think>') or thinking) then
+				if M.config.stream then
+					thinking = not content:find('</think>')
+					return -- ignore
+				end
+				content = content:gsub('<think>.-</think>', '')
+				message.content = content
+			end
 			local last_message = messages[#messages]
-			if M.stream and last_message.role ~= 'user' then
+			if M.config.stream and last_message.role ~= 'user' then
 				last_message.content = last_message.content .. content -- combine
 			else
 				table.insert(messages, message)
@@ -215,8 +240,8 @@ function M.prompt(input)
 			if response_lines <= view.lines_on_screen then view:line_scroll_down() end -- auto-scroll
 		end
 
-		if M.stream then
-			local ok, done = pcall(M.done, response)
+		if M.config.stream then
+			local ok, done = pcall(M.config.done, response)
 			if ok and not done then return end
 		end
 		buffer:add_text('\n\n')
@@ -227,7 +252,7 @@ function M.prompt(input)
 	end
 
 	local stream_buffer = ''
-	local p = os.spawn(curl(M.chat_endpoint) .. ' -d @-', function(output)
+	local p = os.spawn(curl(M.config.chat_endpoint) .. ' -d @-', function(output)
 		-- print('Receive:', output)
 		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
 		repeat
@@ -240,8 +265,7 @@ function M.prompt(input)
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
 	local data = json.encode{
-		model = model, messages = messages, stream = M.stream, think = M.think,
-		options = M.model_options[model]
+		model = model, messages = messages, stream = M.config.stream, think = M.config.think
 	}
 	-- print('Send:', data)
 	p:write(data)
@@ -254,7 +278,7 @@ end
 -- - `@` presents a list of open files to add to the prompt for context.
 events.connect(events.KEYPRESS, function(key)
 	if ui.command_entry.active then return end
-	if not buffer.ollama then return end
+	if not buffer.llm then return end
 	if key == '\n' and not buffer:auto_c_active() then
 		textadept.editing.select_line()
 		local input = buffer:get_sel_text()
@@ -287,9 +311,9 @@ end, 1)
 
 -- Unload local chat model when closing the chat in order to free up memory.
 events.connect(events.BUFFER_DELETED, function(buffer)
-	if not buffer.ollama or not M.url:find('localhost') then return end
+	if not buffer.llm or not M.config.url:find('localhost') then return end
 	local p = os.spawn(curl('/api/generate') .. ' -d @-')
-	p:write(json.encode{model = buffer.ollama.model, keep_alive = 0})
+	p:write(json.encode{model = buffer.llm.model, keep_alive = 0})
 	p:close()
 end)
 
@@ -300,8 +324,8 @@ events.connect(events.VIEW_NEW, function()
 end)
 
 -- Add a menu.
--- (Insert 'Ollama' menu in alphabetical order.)
-_L['Ollama'] = 'Ollam_a'
+-- (Insert 'LLM' menu in alphabetical order.)
+_L['LLM (AI)'] = 'LLM (_AI)'
 _L['Chat...'] = '_Chat...'
 local m_tools = textadept.menu.menubar['Tools']
 local found_area
@@ -310,9 +334,9 @@ for i = 1, #m_tools - 1 do
 		found_area = true
 	elseif found_area then
 		local label = m_tools[i].title or m_tools[i][1]
-		if 'Ollama' < label:gsub('^_', '') or m_tools[i][1] == '' then
+		if 'LLM (AI)' < label:gsub('^_', '') or m_tools[i][1] == '' then
 			table.insert(m_tools, i, { --
-				title = _L['Ollama'], --
+				title = _L['LLM (AI)'], --
 				{_L['Chat...'], M.chat}
 			})
 			break
