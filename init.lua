@@ -102,7 +102,10 @@ local json = require('ollama.dkjson')
 events.MODEL_RESPONSE = 'model_response'
 
 --- Emitted after a model is finished responding.
--- This could be used to provide a notification after a long wait time.
+-- This could be used to provide a notification after a long wait time, or to send the result
+-- to a text-to-speech engine.
+-- Arguments:
+-- - *message*: The model's entire response.
 -- @field _G.events.MODEL_RESPONSE
 
 --- Constructs a curl request to an endpoint.
@@ -220,7 +223,7 @@ function M.prompt(input)
 		if response.eval_count then
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
 		end
-		events.emit(events.MODEL_RESPONSE)
+		events.emit(events.MODEL_RESPONSE, messages[#messages].content)
 	end
 
 	local stream_buffer = ''
