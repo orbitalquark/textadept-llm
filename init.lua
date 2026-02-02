@@ -38,46 +38,47 @@
 local M = {}
 
 --- Configurations for various LLM servers.
+-- @field ollama
+-- @field litellm
+-- @field mlx_lm
 -- @see config
-M.configs = {
-	ollama = {
-		url = 'http://localhost:11434', --
-		models_endpoint = '/api/tags', --
-		model_name_key = 'name', --
-		chat_endpoint = '/api/chat', --
-		chat_message = function(response) return response.message end,
-		done = function(response) return response.done end, --
-		curl_headers = {}, --
-		stream = true, --
-		think = false --
-	}, --
-	litellm = {
-		url = 'https://example.com/v1', --
-		models_endpoint = '/models', --
-		model_name_key = 'id', --
-		chat_endpoint = '/chat/completions', --
-		chat_message = function(response)
-			return response.choices[1].delta or response.choices[1].message
-		end, --
-		done = function(response) return not response.choices[1].delta.content end,
-		curl_headers = {['Content-Type'] = 'application/json'}, --
-		api_key = 'API_KEY', --
-		stream = true, --
-		think = nil -- unsupported
-	}, --
-	mlx_lm = {
-		url = 'http://localhost:8080/v1', --
-		models_endpoint = '/models', --
-		model_name_key = 'id', --
-		chat_endpoint = '/chat/completions', --
-		chat_message = function(response)
-			return response.choices[1].delta or response.choices[1].message
-		end, --
-		done = function(response) return response.choices[1].delta.content == "" end,
-		curl_headers = {['Content-Type'] = 'application/json'}, --
-		stream = true, --
-		think = false
-	}
+M.configs = {}
+
+M.configs.ollama = {
+	url = 'http://localhost:11434', --
+	models_endpoint = '/api/tags', --
+	model_name_key = 'name', --
+	chat_endpoint = '/api/chat', --
+	chat_message = function(response) return response.message end,
+	done = function(response) return response.done end, --
+	curl_headers = {}, --
+	stream = true, --
+	think = false --
+}
+
+M.configs.litellm = {
+	url = 'https://example.com/v1', --
+	models_endpoint = '/models', --
+	model_name_key = 'id', --
+	chat_endpoint = '/chat/completions', --
+	chat_message = function(response) return response.choices[1].delta or response.choices[1].message end, --
+	done = function(response) return not response.choices[1].delta.content end,
+	curl_headers = {['Content-Type'] = 'application/json'}, --
+	api_key = 'API_KEY', --
+	stream = true, --
+	think = nil -- unsupported
+}
+
+M.configs.mlx_lm = {
+	url = 'http://localhost:8080/v1', --
+	models_endpoint = '/models', --
+	model_name_key = 'id', --
+	chat_endpoint = '/chat/completions', --
+	chat_message = function(response) return response.choices[1].delta or response.choices[1].message end, --
+	done = function(response) return response.choices[1].delta.content == "" end,
+	curl_headers = {['Content-Type'] = 'application/json'}, --
+	stream = true, --
+	think = false
 }
 
 --- The config table in `configs` to use.
@@ -97,7 +98,8 @@ M.configs = {
 -- @field think Whether or not to enable thinking for models that support it. Use `nil` if the
 --	server does not support this option.
 -- @usage llm.config = llm.configs.ollama
--- @class table
+M.config = {}
+
 M.config = M.configs.mlx_lm
 
 --- The marker number for prompt lines.

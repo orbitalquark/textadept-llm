@@ -1,53 +1,48 @@
-# Ollama
+# LLM
 
-Chat with local [Ollama][] models using Textadept.
-
-Requires Ollama and `curl` to be installed, and Ollama needs to be running in server mode
-with one or more local models available.
+Chat with Large Language Models (LLMs a.k.a.
+AI) using Textadept.
+Requires `curl` to be installed. This module can interact with local LLM servers like
+[mlx_lm][] or [Ollama][], and remote LLM servers like [LiteLLM][]. Local LLM servers need
+to be running with one or more local models available.
 
 Install this module by copying it into your *~/.textadept/modules/* directory or Textadept's
 *modules/* directory, and then putting the following in your *~/.textadept/init.lua*:
 
 ```lua
-local ollama = require('ollama')
+local llm = require('llm')
 ```
 
-Start a chat session from the "Tools > Ollama > Chat..." menu.
+Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
 
 Pressing `Enter` will prompt the model with the current or selected lines. Pressing
 `Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
 an open file to inline as context to the model prompt.
 
+[mlx_lm]: https://github.com/ml-explore/mlx-lm
 [Ollama]: https://ollama.com/
+[LiteLLM]: https://docs.litellm.ai/
 
 ## Chatting with external models
 
-You can configure this module to talk to external models that do not use the Ollama API.
-Here is a sample configuration to talk to an OpenAI-compatible model (tested with [LiteLLM][]):
+You can configure this module to talk to external models that use an OpenAI-compatible or
+Ollama-compatible API. For example:
 
 ```lua
-local ollama = require('ollama')
-ollama.url = 'https://example.com'
-ollama.models_endpoint = '/models'
-ollama.model_name_key = 'id'
-ollama.chat_endpoint = '/chat/completions'
-ollama.chat_message = function(response)
-	return response.choices[1].message or response.choices[1].delta
-end
-ollama.done = function(response) return not response.choices[1].delta.content end
-ollama.curl_headers = {['Content-Type'] = 'application/json'}
-ollama.api_key = 'API_KEY'
+local llm = require('llm')
+local config = llm.configs.litellm
+config.url = 'https://dev.example.com'
+config.api_key = 'API_KEY'
+llm.config = config
 ```
 
-[LiteLLM]: https://docs.litellm.ai/
-
-<a id="ollama.MARK_PROMPT"></a>
-## `ollama.MARK_PROMPT`
+<a id="llm.MARK_PROMPT"></a>
+## `llm.MARK_PROMPT`
 
 The marker number for prompt lines.
 
-<a id="ollama.MARK_PROMPT_COLOR"></a>
-## `ollama.MARK_PROMPT_COLOR`
+<a id="llm.MARK_PROMPT_COLOR"></a>
+## `llm.MARK_PROMPT_COLOR`
 
 The color of prompt markers.
 
@@ -56,17 +51,13 @@ The color of prompt markers.
 
 Emitted after a model is finished responding.
 
-This could be used to provide a notification after a long wait time.
+This could be used to provide a notification after a long wait time, or to send the result
+to a text-to-speech engine.
+Arguments:
+- *message*: The model's entire response.
 
-<a id="ollama.api_key"></a>
-## `ollama.api_key`
-
-API authorization key when chatting with external models.
-
-The default value is `nil` since Ollama does not need this.
-
-<a id="ollama.chat"></a>
-## `ollama.chat`([*model*[, *system_prompt*]])
+<a id="llm.chat"></a>
+## `llm.chat`([*model*[, *system_prompt*]])
 
 Opens a new chat session with a model.
 
@@ -75,63 +66,49 @@ Parameters:
 - *system_prompt*:  String system prompt to use for *model*. If both this and *model*
 	are `nil`, the user has the option to specify a system prompt in the model prompt.
 
-<a id="ollama.chat_endpoint"></a>
-## `ollama.chat_endpoint`
+<a id="llm.config"></a>
+## `llm.config`
 
-REST endpoint for chatting with a model.
+The config table in `configs` to use.
 
-The default value is '/api/chat' and should only be changed if you are not using Ollama.
+Note: you may still have to configure things like the URL and API key.
 
-<a id="ollama.chat_message"></a>
-## `ollama.chat_message`(*response*)
+Fields:
+- `url`:  String URL and port the server is running on.
+- `models_endpoint`:  String REST endpoint that returns list of available models.
+- `model_name_key`:  String key whose value is the model name for each model in the REST
+	response for `models_endpoint`.
+- `chat_endpoint`:  String REST endpoint for chatting with a model.
+- `chat_message`:  Function that accepts a REST response table from`chat_endpoint` and
+	returns its message object (not a string).
+- `done`:  Function that accepts a REST streaming response table from `chat_endpoint`
+	and returns whether or not that endpoint is done streaming.
+- `curl_headers`:  Optional map of HTTP headers to send with curl requests to the server.
+- `api_key`:  Optional string API authorization key for the server.
+- `stream`:  Whether or not to stream server responses in real-time.
+- `think`:  Whether or not to enable thinking for models that support it. Use `nil` if the
+	server does not support this option.
 
-Function to extract the message from the REST response for `chat_endpoint`.
+Usage:
 
-This should only be changed if you are not using Ollama.
+```lua
+llm.config = llm.configs.ollama
+```
 
-Parameters:
-- *response*:  Table containing a model response.
+<a id="llm.configs"></a>
+## `llm.configs`
 
-<a id="ollama.curl_headers"></a>
-## `ollama.curl_headers`
+Configurations for various LLM servers.
 
-Optional map of HTTP headers to send with curl requests to an external model.
+Fields:
+- `ollama`: 
+- `litellm`: 
+- `mlx_lm`: 
 
-The default value is an empty map since Ollama does not need any headers.
+See also: [`llm.config`](#llm.config)
 
-<a id="ollama.done"></a>
-## `ollama.done`(*response*)
-
-Function that returns whether or not a REST response from `chat_endpoint` is done streaming.
-
-This should only be changed if you are not using Ollama.
-
-Parameters:
-- *response*:  Table containing a streamed model response.
-
-<a id="ollama.model_name_key"></a>
-## `ollama.model_name_key`
-
-The key whose value is the model name for each model in the REST response for `models_endpoint`.
-
-The default value is 'name' and should only be changed if you are not using Ollama.
-
-<a id="ollama.model_options"></a>
-## `ollama.model_options`
-
-Map of model names with their options.
-
-Options are tables that will be encoded into JSON before being sent to Ollama.
-
-<a id="ollama.models_endpoint"></a>
-## `ollama.models_endpoint`
-
-REST endpoint for fetching a list of available models.
-
-The default value is '/api/tags' and should only be changed if you are not using Ollama.
-
-<a id="ollama.prompt"></a>
-## `ollama.prompt`(*input*)
+<a id="llm.prompt"></a>
+## `llm.prompt`(*input*)
 
 Prompts the current chat model with input.
 
@@ -140,28 +117,6 @@ A model's response will be printed when it is received.
 Parameters:
 - *input*:  String input to prompt with. Any '@*filename*' references are replaced with
 	their file's contents.
-
-<a id="ollama.stream"></a>
-## `ollama.stream`
-
-Whether or not to stream model responses in real-time.
-
-The default value is `true`.
-
-<a id="ollama.think"></a>
-## `ollama.think`
-
-Whether models with thinking capabilities should think before responding.
-
-The default value is `false`.
-
-<a id="ollama.url"></a>
-## `ollama.url`
-
-URL Ollama is running on (http://host:port).
-
-The default value is `http://localhost:11434` and should only be changed if Ollama is running on
-a different port, or if you are not using Ollama.
 
 
 
