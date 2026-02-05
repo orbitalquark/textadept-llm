@@ -121,6 +121,20 @@ events.MODEL_RESPONSE = 'model_response'
 -- - *message*: The model's entire response.
 -- @field _G.events.MODEL_RESPONSE
 
+--- The directory to save chats to.
+-- The default value is *~/.textadept/chats/*.
+M.chat_directory = _USERHOME .. '/chats'
+if WIN32 then M.chat_directory = M.chat_directory:gsub('/', '\\') end
+
+--- Returns the current chat directory, creating it if necessary.
+local function get_chat_directory()
+	local chat_dir = M.chat_directory
+	local mode = lfs.attributes(chat_dir, 'mode')
+	assert(not mode or mode == 'directory', 'chat_directory must be a directory')
+	if not mode then assert(lfs.mkdir(chat_dir)) end
+	return chat_dir
+end
+
 --- Constructs a curl request to an endpoint.
 -- POST requests should append ' -d @-' to the returned result.
 -- @param endpoint String endpoint name to send the request to.
@@ -278,6 +292,63 @@ function M.prompt(input)
 	buffer.annotation_text[buffer.line_count] = _L['Awaiting response...']
 end
 
+--- Saves the current chat.
+-- @param[opt] filename String filename to save to. If `nil`, the user is prompted for one.
+function M.save(filename)
+	if not buffer.llm then return end
+	if not assert_type(filename, 'string/nil', 1) then
+		filename = ui.dialogs.save{title = _L['Save Chat'], dir = get_chat_directory()}
+		if not filename then return end
+	end
+
+	local f<close> = io.open(filename, 'w')
+	f:write('return {\n')
+	for _, message in ipairs(buffer.llm.messages) do
+		f:write('\t{\n')
+		f:write(string.format('role="%s",\n', message.role))
+		f:write(string.format('content=[=[%s]=],\n', message.content))
+		f:write('\t},\n')
+	end
+	f:write('}\n')
+end
+
+--- Loads a previously saved chat into the current model, discarding the current chat.
+-- @param[opt] filename String filename to load. If `nil`, the user is prompted for one.
+function M.load(filename)
+	if not buffer.llm then
+		ui.dialogs.message{title = _L['Load Chat'], text = _L['You need to start a chat to load one.']}
+		return
+	end
+
+	if not assert_type(filename, 'string/nil', 1) then
+		filename = ui.dialogs.open{title = _L['Load Chat'], dir = get_chat_directory()}
+		if not filename then return end
+	end
+
+	local messages = assert(loadfile(filename, 't', {}))()
+	buffer.llm.messages = messages
+
+	buffer:clear_all()
+
+	local model = buffer.llm.model
+	buffer:add_text(string.format('%s %s\n', _L['Chatting with'], model))
+	if messages[1].role == 'system' then
+		buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], messages[1].content))
+	end
+
+	for i, message in ipairs(messages) do
+		if i == 1 and messages[1].role == 'system' then goto continue end
+		buffer:add_text(message.content:gsub('\\n', '\n'))
+		if message.role == 'user' then
+			local end_line = buffer:line_from_position(buffer.current_pos)
+			local start_line = end_line - select(2, message.content:gsub('\n', ''))
+			for i = start_line, end_line do buffer:marker_add(i, M.MARK_PROMPT) end
+		end
+		buffer:add_text('\n\n')
+		::continue::
+	end
+end
+
 -- Respond to keypresses in a chat buffer.
 -- - `\n` prompts the model with either the current line or selected lines.
 -- - `@` presents a list of open files to add to the prompt for context.
@@ -342,7 +413,10 @@ for i = 1, #m_tools - 1 do
 		if 'LLM (AI)' < label:gsub('^_', '') or m_tools[i][1] == '' then
 			table.insert(m_tools, i, { --
 				title = _L['LLM (AI)'], --
-				{_L['Chat...'], M.chat}
+				{_L['Chat...'], M.chat}, --
+				{''}, --
+				{_L['Save...'], M.save}, --
+				{_L['Load...'], M.load}
 			})
 			break
 		end
