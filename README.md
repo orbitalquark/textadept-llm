@@ -141,5 +141,12 @@ Saves the current chat.
 Parameters:
 - *filename*:  String filename to save to. If `nil`, the user is prompted for one.
 
+<a id="llm.undo"></a>
+## `llm.undo`()
+
+Undo the most recent chat message you submitted.
+
+You will be able to edit and resend it.
+
 
 

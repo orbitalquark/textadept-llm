@@ -292,6 +292,25 @@ function M.prompt(input)
 	buffer.annotation_text[buffer.line_count] = _L['Awaiting response...']
 end
 
+--- Undo the most recent chat message you submitted.
+-- You will be able to edit and resend it.
+function M.undo()
+	local mark_bit = 1 << M.MARK_PROMPT - 1
+	local line = buffer:marker_previous(buffer.line_count, mark_bit)
+	if line == -1 then return end
+
+	local pos = buffer.line_end_position[line]
+	buffer:delete_range(pos, buffer.length - pos + 1)
+
+	while buffer:marker_get(line) & mark_bit > 0 do
+		buffer:marker_delete(line, M.MARK_PROMPT)
+		line = line - 1
+	end
+
+	table.remove(buffer.llm.messages) -- assistant
+	table.remove(buffer.llm.messages) -- user
+end
+
 --- Saves the current chat.
 -- @param[opt] filename String filename to save to. If `nil`, the user is prompted for one.
 function M.save(filename)
@@ -402,7 +421,10 @@ end)
 -- Add a menu.
 -- (Insert 'LLM' menu in alphabetical order.)
 _L['LLM (AI)'] = 'LLM (_AI)'
-_L['Chat...'] = '_Chat...'
+_L['Chat With Model...'] = '_Chat With Model...'
+_L['Undo Last Message'] = '_Undo Last Message'
+_L['Save Chat...'] = '_Save Chat...'
+_L['Load Chat...'] = '_Load Chat...'
 local m_tools = textadept.menu.menubar['Tools']
 local found_area
 for i = 1, #m_tools - 1 do
@@ -413,10 +435,12 @@ for i = 1, #m_tools - 1 do
 		if 'LLM (AI)' < label:gsub('^_', '') or m_tools[i][1] == '' then
 			table.insert(m_tools, i, { --
 				title = _L['LLM (AI)'], --
-				{_L['Chat...'], M.chat}, --
+				{_L['Chat With Model...'], M.chat}, --
 				{''}, --
-				{_L['Save...'], M.save}, --
-				{_L['Load...'], M.load}
+				{_L['Undo Last Message'], M.undo}, --
+				{''}, --
+				{_L['Save Chat...'], M.save}, --
+				{_L['Load Chat...'], M.load}
 			})
 			break
 		end
