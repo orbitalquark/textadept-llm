@@ -85,9 +85,9 @@ Fields:
 	and returns whether or not that endpoint is done streaming.
 - `curl_headers`:  Optional map of HTTP headers to send with curl requests to the server.
 - `api_key`:  Optional string API authorization key for the server.
-- `stream`:  Whether or not to stream server responses in real-time.
-- `think`:  Whether or not to enable thinking for models that support it. Use `nil` if the
 	server does not support this option.
+- `model`:  Map of model names to maps of model-specific options like 'stream', 'think',
+	'temperature', 'top_p', etc.
 
 Usage:
 

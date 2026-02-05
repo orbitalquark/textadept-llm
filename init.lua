@@ -44,6 +44,9 @@ local M = {}
 -- @see config
 M.configs = {}
 
+--- Returns a new table where unknown keys return the given table as a default.
+local function default(t) return setmetatable({}, {__index = function() return t end}) end
+
 M.configs.ollama = {
 	url = 'http://localhost:11434', --
 	models_endpoint = '/api/tags', --
@@ -52,8 +55,7 @@ M.configs.ollama = {
 	chat_message = function(response) return response.message end,
 	done = function(response) return response.done end, --
 	curl_headers = {}, --
-	stream = true, --
-	think = false --
+	model = default{stream = true, think = false}
 }
 
 M.configs.litellm = {
@@ -65,8 +67,7 @@ M.configs.litellm = {
 	done = function(response) return not response.choices[1].delta.content end,
 	curl_headers = {['Content-Type'] = 'application/json'}, --
 	api_key = 'API_KEY', --
-	stream = true, --
-	think = nil -- unsupported
+	model = default{stream = true}
 }
 
 M.configs.mlx_lm = {
@@ -77,8 +78,9 @@ M.configs.mlx_lm = {
 	chat_message = function(response) return response.choices[1].delta or response.choices[1].message end, --
 	done = function(response) return response.choices[1].delta.content == "" end,
 	curl_headers = {['Content-Type'] = 'application/json'}, --
-	stream = true, --
-	think = false
+	model = default{
+		stream = true, think = false, temperature = 0.7, top_p = 0.8, top_k = 20, max_tokens = 32768
+	}
 }
 
 --- The config table in `configs` to use.
@@ -94,9 +96,9 @@ M.configs.mlx_lm = {
 --	and returns whether or not that endpoint is done streaming.
 -- @field curl_headers Optional map of HTTP headers to send with curl requests to the server.
 -- @field api_key Optional string API authorization key for the server.
--- @field stream Whether or not to stream server responses in real-time.
--- @field think Whether or not to enable thinking for models that support it. Use `nil` if the
 --	server does not support this option.
+-- @field model Map of model names to maps of model-specific options like 'stream', 'think',
+--	'temperature', 'top_p', etc.
 -- @usage llm.config = llm.configs.ollama
 M.config = {}
 
@@ -122,7 +124,8 @@ events.MODEL_RESPONSE = 'model_response'
 --- Constructs a curl request to an endpoint.
 -- POST requests should append ' -d @-' to the returned result.
 -- @param endpoint String endpoint name to send the request to.
-local function curl(endpoint)
+-- @param[opt] streaming Whether or not the endpoint is streaming.
+local function curl(endpoint, streaming)
 	local headers = {}
 	if M.config.api_key then
 		headers[1] = string.format('-H "Authorization: Bearer %s"', M.config.api_key)
@@ -130,7 +133,7 @@ local function curl(endpoint)
 	for k, v in pairs(M.config.curl_headers) do
 		headers[#headers + 1] = string.format('-H "%s: %s"', k, v)
 	end
-	return string.format('curl -s %s %s%s %s', M.config.stream and '-N' or '', M.config.url, endpoint,
+	return string.format('curl -s %s %s%s %s', streaming and '-N' or '', M.config.url, endpoint,
 		table.concat(headers, ' '))
 end
 
@@ -202,8 +205,8 @@ function M.prompt(input)
 	-- Keep track of the first line of the incoming response so autoscrolling does not skip past it.
 	local top_line = buffer:line_from_position(buffer.current_pos) + 1
 
-	-- Some models still output think tags, even when thinking is turned off. Do not print them.
-	local thinking = false
+	local streaming = M.config.model[model].stream
+	local thinking = false -- some models always print think tags, even if think is off; ignore them
 
 	-- Outputs the chat response content from an incoming line of JSON output.
 	-- @param line String JSON line.
@@ -216,8 +219,8 @@ function M.prompt(input)
 		local content = ok and (message.content or '') or
 			string.format('error processing line `%s`: %s', line, message)
 		if ok then
-			if not M.config.think and (content:find('</?think>') or thinking) then
-				if M.config.stream then
+			if not M.config.model[model].think and (content:find('</?think>') or thinking) then
+				if streaming then
 					thinking = not content:find('</think>')
 					return -- ignore
 				end
@@ -225,7 +228,7 @@ function M.prompt(input)
 				message.content = content
 			end
 			local last_message = messages[#messages]
-			if M.config.stream and last_message.role ~= 'user' then
+			if streaming and last_message.role ~= 'user' then
 				last_message.content = last_message.content .. content -- combine
 			else
 				table.insert(messages, message)
@@ -242,19 +245,19 @@ function M.prompt(input)
 			if response_lines <= view.lines_on_screen then view:line_scroll_down() end -- auto-scroll
 		end
 
-		if M.config.stream then
+		if streaming then
 			local ok, done = pcall(M.config.done, response)
 			if ok and not done then return end
 		end
 		buffer:add_text('\n\n')
-		if response.eval_count then
+		if response.eval_count then -- Ollama
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
 		end
 		events.emit(events.MODEL_RESPONSE, messages[#messages].content)
 	end
 
 	local stream_buffer = ''
-	local p = os.spawn(curl(M.config.chat_endpoint) .. ' -d @-', function(output)
+	local p = os.spawn(curl(M.config.chat_endpoint, streaming) .. ' -d @-', function(output)
 		-- print('Receive:', output)
 		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
 		repeat
@@ -266,9 +269,9 @@ function M.prompt(input)
 
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
-	local data = json.encode{
-		model = model, messages = messages, stream = M.config.stream, think = M.config.think
-	}
+	local data = {model = model, messages = messages}
+	for k, v in pairs(M.config.model[model] or {}) do data[k] = v end
+	data = json.encode(data)
 	-- print('Send:', data)
 	p:write(data)
 	p:close()
@@ -311,9 +314,9 @@ events.connect(events.KEYPRESS, function(key)
 	end
 end, 1)
 
--- Unload local chat model when closing the chat in order to free up memory.
+-- Unload local Ollama chat model when closing the chat in order to free up memory.
 events.connect(events.BUFFER_DELETED, function(buffer)
-	if not buffer.llm or not M.config.url:find('localhost') then return end
+	if not buffer.llm or M.config ~= M.configs.ollama then return end
 	local p = os.spawn(curl('/api/generate') .. ' -d @-')
 	p:write(json.encode{model = buffer.llm.model, keep_alive = 0})
 	p:close()
