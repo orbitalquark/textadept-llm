@@ -51,10 +51,19 @@ The color of prompt markers.
 
 Emitted after a model is finished responding.
 
-This could be used to provide a notification after a long wait time, or to send the result
-to a text-to-speech engine.
+This could be used to provide a notification after a long wait time.
 Arguments:
 - *message*: The model's entire response.
+
+<a id="events.MODEL_RESPONSE_STREAM"></a>
+## `events.MODEL_RESPONSE_STREAM`
+
+Emitted after a model emits a paragraph of streamed response.
+
+Paragraphs are delimitted by consecutive newlines.
+This could be used to send the paragraph to a text-to-speech engine.
+Arguments:
+- *text*: Partial model message.
 
 <a id="llm.chat"></a>
 ## `llm.chat`([*model*[, *system_prompt*]])

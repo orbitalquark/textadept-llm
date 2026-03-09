@@ -113,13 +113,20 @@ M.MARK_PROMPT_COLOR = 0x00CC99
 local json = require('llm.dkjson')
 
 events.MODEL_RESPONSE = 'model_response'
+events.MODEL_RESPONSE_STREAM = 'model_response_stream'
 
 --- Emitted after a model is finished responding.
--- This could be used to provide a notification after a long wait time, or to send the result
--- to a text-to-speech engine.
+-- This could be used to provide a notification after a long wait time.
 -- Arguments:
 -- - *message*: The model's entire response.
 -- @field _G.events.MODEL_RESPONSE
+
+--- Emitted after a model emits a paragraph of streamed response.
+-- Paragraphs are delimitted by consecutive newlines.
+-- This could be used to send the paragraph to a text-to-speech engine.
+-- Arguments:
+-- - *text*: Partial model message.
+-- @field _G.events.MODEL_RESPONSE_STREAM
 
 --- The directory to save chats to.
 -- The default value is *~/.textadept/chats/*.
@@ -221,6 +228,7 @@ function M.prompt(input)
 
 	local streaming = M.config.model[model].stream
 	local thinking = false -- some models always print think tags, even if think is off; ignore them
+	local current_line = ''
 
 	-- Outputs the chat response content from an incoming line of JSON output.
 	-- @param line String JSON line.
@@ -244,10 +252,18 @@ function M.prompt(input)
 			local last_message = messages[#messages]
 			if streaming and last_message.role ~= 'user' then
 				last_message.content = last_message.content .. content -- combine
+				current_line = current_line .. content
 			else
+				if streaming then current_line = content end
 				table.insert(messages, message)
 				buffer:add_text('\n')
 				buffer:annotation_clear_all() -- clear "Awaiting response..."
+			end
+			while streaming and current_line:find('\n\n') do
+				local remainder
+				current_line, remainder = current_line:match('^(.-)\n\n(.*)$')
+				events.emit(events.MODEL_RESPONSE_STREAM, current_line)
+				current_line = remainder or ''
 			end
 		end
 
@@ -267,6 +283,7 @@ function M.prompt(input)
 		if response.eval_count then -- Ollama
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
 		end
+		if streaming then events.emit(events.MODEL_RESPONSE_STREAM, current_line) end
 		events.emit(events.MODEL_RESPONSE, messages[#messages].content)
 	end
 
@@ -361,7 +378,7 @@ function M.load(filename)
 		if message.role == 'user' then
 			local end_line = buffer:line_from_position(buffer.current_pos)
 			local start_line = end_line - select(2, message.content:gsub('\n', ''))
-			for i = start_line, end_line do buffer:marker_add(i, M.MARK_PROMPT) end
+			for j = start_line, end_line do buffer:marker_add(j, M.MARK_PROMPT) end
 		end
 		buffer:add_text('\n\n')
 		::continue::
