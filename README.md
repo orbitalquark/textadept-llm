@@ -99,6 +99,7 @@ The default value is *~/.textadept/chats/*.
 The config table in `configs` to use.
 
 Note: you may still have to configure things like the URL and API key.
+The default value is `llm.config.ollama`.
 
 Fields:
 - `url`:  String URL and port the server is running on.
@@ -119,7 +120,7 @@ Fields:
 Usage:
 
 ```lua
-llm.config = llm.configs.ollama
+llm.config = llm.configs.mlx_lm
 ```
 
 <a id="llm.configs"></a>

@@ -94,6 +94,7 @@ M.configs.mlx_lm = {
 
 --- The config table in `configs` to use.
 -- Note: you may still have to configure things like the URL and API key.
+-- The default value is `llm.config.ollama`.
 -- @field url String URL and port the server is running on.
 -- @field models_endpoint String REST endpoint that returns list of available models.
 -- @field model_name_key String key whose value is the model name for each model in the REST
@@ -108,10 +109,10 @@ M.configs.mlx_lm = {
 --	server does not support this option.
 -- @field model Map of model names to maps of model-specific options like 'stream', 'think',
 --	'temperature', 'top_p', etc.
--- @usage llm.config = llm.configs.ollama
+-- @usage llm.config = llm.configs.mlx_lm
 M.config = {}
 
-M.config = M.configs.mlx_lm
+M.config = M.configs.ollama
 
 --- The marker number for prompt lines.
 M.MARK_PROMPT = view.new_marker_number()
