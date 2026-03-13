@@ -183,6 +183,7 @@ function M.chat(model, system_prompt)
 
 		local names = table.map(models, function(mod) return mod[M.config.model_name_key] end)
 		if #names == 0 then error('no local models to chat with', 2) end
+		table.sort(names)
 		local i, button = ui.dialogs.list{
 			title = _L['Select Model'], items = names, button2 = _L['Cancel'],
 			button3 = _L['Set system prompt...'], return_button = true
