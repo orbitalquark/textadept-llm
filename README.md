@@ -19,6 +19,17 @@ Pressing `Enter` will prompt the model with the current or selected lines. Press
 `Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
 an open file to inline as context to the model prompt.
 
+If you have custom model options you want to use, like `temperature` and `top_p`, each server
+config has a `models` table with fields you can set. For example:
+
+```lua
+llm.configs.mlx_lm.model['mlx-community/Qwen3.5-9B-4bit'] = {
+	stream = true, temperature = 0.7, top_p = 0.8, top_k = 20, max_tokens = 32768
+}
+```
+
+The default model options enable streaming.
+
 [mlx_lm]: https://github.com/ml-explore/mlx-lm
 [Ollama]: https://ollama.com/
 [LiteLLM]: https://docs.litellm.ai/
