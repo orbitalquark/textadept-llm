@@ -14,9 +14,8 @@
 --
 -- Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
 --
--- Pressing `Enter` will prompt the model with the current or selected lines. Pressing
--- `Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
--- an open file to inline as context to the model prompt.
+-- Pressing `Enter` will prompt the model. Pressing `Shift+Enter` adds a new line without prompting
+-- the model. Typing `@` will prompt you for an open file to inline as context to the model prompt.
 --
 -- If you have custom model options you want to use, like `temperature` and `top_p`, each server
 -- config has a `models` table with fields you can set. For example:
@@ -116,6 +115,8 @@ M.config = M.configs.ollama
 
 --- The marker number for prompt lines.
 M.MARK_PROMPT = view.new_marker_number()
+--- The indicator number for where the LLM response ends.
+M.INDIC_LLM_END = view.new_indic_number()
 
 --- The color of prompt markers.
 M.MARK_PROMPT_COLOR = 0x00CC99
@@ -172,6 +173,13 @@ end
 -- @param model String model name.
 local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Chat'], model) end
 
+--- Marks the last character on the given line to help determine where user prompt starts.
+-- @param line Line number to mark.
+local function mark_llm_message_end(line)
+	buffer.indicator_current = M.INDIC_LLM_END
+	buffer:indicator_fill_range(buffer.line_end_position[line] - 1, 1)
+end
+
 --- Opens a new chat session with a model.
 -- @param[opt] model String model name to chat with. If `nil`, the user is prompted for one.
 -- @param[opt] system_prompt String system prompt to use for *model*. If both this and *model*
@@ -211,6 +219,7 @@ function M.chat(model, system_prompt)
 		ui.print_to(chat_buffer_type(model), string.format('%s: %s', _L['System Prompt'], system_prompt))
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
+	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
 end
 
 --- Prompts the current chat model with input.
@@ -290,6 +299,7 @@ function M.prompt(input)
 			local ok, done = pcall(M.config.done, response)
 			if ok and not done then return end
 		end
+		mark_llm_message_end(buffer:line_from_position(buffer.current_pos))
 		buffer:add_text('\n\n')
 		if response.eval_count then -- Ollama
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
@@ -382,6 +392,7 @@ function M.load(filename)
 	if messages[1].role == 'system' then
 		buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], messages[1].content))
 	end
+	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
 
 	for i, message in ipairs(messages) do
 		if i == 1 and messages[1].role == 'system' then goto continue end
@@ -390,6 +401,8 @@ function M.load(filename)
 			local end_line = buffer:line_from_position(buffer.current_pos)
 			local start_line = end_line - select(2, message.content:gsub('\n', ''))
 			for j = start_line, end_line do buffer:marker_add(j, M.MARK_PROMPT) end
+		elseif message.role == 'assistant' then
+			mark_llm_message_end(buffer:line_from_position(buffer.current_pos))
 		end
 		buffer:add_text('\n\n')
 		::continue::
@@ -400,16 +413,21 @@ end
 -- - `\n` prompts the model with either the current line or selected lines.
 -- - `@` presents a list of open files to add to the prompt for context.
 events.connect(events.KEYPRESS, function(key)
-	if ui.command_entry.active then return end
+	if ui.command_entry.active or buffer:auto_c_active() then return end
 	if not buffer.llm then return end
-	if key == '\n' and not buffer:auto_c_active() then
-		textadept.editing.select_line()
-		local input = buffer:get_sel_text()
-		M.prompt(input)
-		local start_line = buffer:line_from_position(buffer.selection_start)
-		local end_line = buffer:line_from_position(buffer.selection_end)
-		for i = start_line, end_line do buffer:marker_add(i, M.MARK_PROMPT) end
-		buffer:char_right() -- go to selection end (which is also line end)
+	if key == '\n' then
+		-- Find where last LLM response ends.
+		local pos, indic = buffer.current_pos, 1 << M.INDIC_LLM_END - 1
+		while pos > 1 and buffer:indicator_all_on_for(pos) & indic == 0 do pos = pos - 1 end
+		-- Skip over blank lines.
+		local line = buffer:line_from_position(pos) + 1
+		while buffer:position_from_line(line) == buffer.line_end_position[line] do line = line + 1 end
+		-- Mark prompt lines.
+		for i = line, buffer:line_from_position(buffer.current_pos) do
+			buffer:marker_add(i, M.MARK_PROMPT)
+		end
+		-- Prompt the LLM.
+		M.prompt(buffer:text_range(buffer:position_from_line(line), buffer.current_pos))
 		buffer:new_line()
 		return true
 	elseif key == '@' then
@@ -444,6 +462,7 @@ end)
 events.connect(events.VIEW_NEW, function()
 	view:marker_define(M.MARK_PROMPT, view.MARK_FULLRECT)
 	view.marker_back[M.MARK_PROMPT] = M.MARK_PROMPT_COLOR
+	view.indic_style[M.INDIC_LLM_END] = view.INDIC_HIDDEN
 end)
 
 -- Add a menu.

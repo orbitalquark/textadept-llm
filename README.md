@@ -15,9 +15,8 @@ local llm = require('llm')
 
 Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
 
-Pressing `Enter` will prompt the model with the current or selected lines. Pressing
-`Shift+Enter` adds a new line without prompting the model. Typing `@` will prompt you for
-an open file to inline as context to the model prompt.
+Pressing `Enter` will prompt the model. Pressing `Shift+Enter` adds a new line without prompting
+the model. Typing `@` will prompt you for an open file to inline as context to the model prompt.
 
 If you have custom model options you want to use, like `temperature` and `top_p`, each server
 config has a `models` table with fields you can set. For example:
