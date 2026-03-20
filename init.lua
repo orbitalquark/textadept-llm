@@ -222,6 +222,7 @@ function M.chat(model, system_prompt)
 	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
 end
 
+local p
 --- Prompts the current chat model with input.
 -- A model's response will be printed when it is received.
 -- @param input String input to prompt with. Any '@*filename*' references are replaced with
@@ -309,7 +310,7 @@ function M.prompt(input)
 	end
 
 	local stream_buffer = ''
-	local p = os.spawn(curl(M.config.chat_endpoint, streaming) .. ' -d @-', function(output)
+	p = os.spawn(curl(M.config.chat_endpoint, streaming) .. ' -d @-', function(output)
 		-- print('Receive:', output)
 		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
 		repeat
@@ -317,7 +318,7 @@ function M.prompt(input)
 			output = output:gsub('^data:', '') -- OpenAI does not stream pure JSON objects
 			process_line(output)
 		until not stream_buffer:find('\n')
-	end)
+	end, nil, function() p = nil end)
 
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
@@ -469,6 +470,7 @@ end)
 -- (Insert 'LLM' menu in alphabetical order.)
 _L['LLM (AI)'] = 'LLM (_AI)'
 _L['Chat With Model...'] = '_Chat With Model...'
+_L['Stop Incoming Message'] = 'S_top Incoming Message'
 _L['Undo Last Message'] = '_Undo Last Message'
 _L['Save Chat...'] = '_Save Chat...'
 _L['Load Chat...'] = '_Load Chat...'
@@ -484,6 +486,7 @@ for i = 1, #m_tools - 1 do
 				title = _L['LLM (AI)'], --
 				{_L['Chat With Model...'], M.chat}, --
 				{''}, --
+				{_L['Stop Incoming Message'], function() if p then p:kill() end end}, --
 				{_L['Undo Last Message'], M.undo}, --
 				{''}, --
 				{_L['Save Chat...'], M.save}, --
