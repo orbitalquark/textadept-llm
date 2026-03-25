@@ -2,15 +2,20 @@
 
 Chat with Large Language Models (LLMs a.k.a.
 AI) using Textadept.
-Requires `curl` to be installed. This module can interact with local LLM servers like
-[mlx_lm][] or [Ollama][], and remote LLM servers like [LiteLLM][]. Local LLM servers need
-to be running with one or more local models available.
+Requires `curl` to be installed. This module can interact with [OpenAI-compatible][] LLM
+servers, whether they are local (like [mlx_lm][]) or remote. It can also interact with
+[Ollama][]. Local LLM servers need to be running with one or more local models available.
 
 Install this module by copying it into your *~/.textadept/modules/* directory or Textadept's
 *modules/* directory, and then putting the following in your *~/.textadept/init.lua*:
 
 ```lua
 local llm = require('llm')
+-- Remote, OpenAI-compatible server config.
+llm.config.url = 'https://dev.example.com' -- if not OpenAI
+llm.config.api_key = 'API_KEY'
+-- Local mlx_lm server config.
+llm.config.url = 'http://localhost:8080/v1'
 ```
 
 Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
@@ -22,29 +27,21 @@ If you have custom model options you want to use, like `temperature` and `top_p`
 config has a `models` table with fields you can set. For example:
 
 ```lua
-llm.configs.mlx_lm.model['mlx-community/Qwen3.5-9B-4bit'] = {
+llm.config.model['mlx-community/Qwen3.5-9B-4bit'] = {
 	stream = true, temperature = 0.7, top_p = 0.8, top_k = 20, max_tokens = 32768
 }
 ```
 
 The default model options enable streaming.
 
+[OpenAI-compatible]: https://developers.openai.com/api/reference/overview
 [mlx_lm]: https://github.com/ml-explore/mlx-lm
 [Ollama]: https://ollama.com/
-[LiteLLM]: https://docs.litellm.ai/
 
-## Chatting with external models
+<a id="llm.INDIC_LLM_END"></a>
+## `llm.INDIC_LLM_END`
 
-You can configure this module to talk to external models that use an OpenAI-compatible or
-Ollama-compatible API. For example:
-
-```lua
-local llm = require('llm')
-local config = llm.configs.litellm
-config.url = 'https://dev.example.com'
-config.api_key = 'API_KEY'
-llm.config = config
-```
+The indicator number for where the LLM response ends.
 
 <a id="llm.MARK_PROMPT"></a>
 ## `llm.MARK_PROMPT`
@@ -98,7 +95,7 @@ The default value is *~/.textadept/chats/*.
 The config table in `configs` to use.
 
 Note: you may still have to configure things like the URL and API key.
-The default value is `llm.config.ollama`.
+The default value is `llm.config.openai`.
 
 Fields:
 - `url`:  String URL and port the server is running on.
@@ -119,7 +116,7 @@ Fields:
 Usage:
 
 ```lua
-llm.config = llm.configs.mlx_lm
+llm.config = llm.configs.ollama
 ```
 
 <a id="llm.configs"></a>
@@ -128,9 +125,8 @@ llm.config = llm.configs.mlx_lm
 Configurations for various LLM servers.
 
 Fields:
+- `openai`: 
 - `ollama`: 
-- `litellm`: 
-- `mlx_lm`: 
 
 See also: [`llm.config`](#llm.config)
 
