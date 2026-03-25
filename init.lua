@@ -159,7 +159,7 @@ local function get_model(allow_system_prompt)
 		title = _L['Select Model'], items = names, button2 = _L['Cancel'],
 		button3 = allow_system_prompt and _L['Set system prompt...'] or nil, return_button = true
 	}
-	if not i or button == 2 then return end
+	if not i or button == 2 then return nil, nil end
 
 	return names[i], button == 3 and ui.dialogs.input{title = _L['System Prompt']} or nil
 end
@@ -184,6 +184,7 @@ function M.chat(model, system_prompt, current_buffer)
 		else
 			model = get_model()
 		end
+		if not model then return end
 	end
 	if not current_buffer then buffer.new() end
 	buffer:add_text(string.format('%s %s\n', _L['Chatting with'], model))
@@ -345,10 +346,11 @@ end)
 events.connect(events.FILE_OPENED, function(filename)
 	if buffer:get_line(1) ~= SERIALIZED_MARKER then return end
 	local ok, model = pcall(get_model)
-	if not ok then
+	if not ok or not model then
 		ui.dialogs.message{
 			title = _L['Error Loading Chat'],
-			text = string.format('%s: %s', _L['Unable to select a model to chat with'], model)
+			text = string.format('%s: %s', _L['Unable to select a model to chat with'],
+				model or _L['user cancelled'])
 		}
 		return
 	end
