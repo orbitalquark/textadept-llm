@@ -194,6 +194,7 @@ function M.chat(model, system_prompt, current_buffer)
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
 	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
+	buffer:empty_undo_buffer()
 end
 
 local p
@@ -283,7 +284,7 @@ function M.prompt(input)
 			output = output:gsub('^data:', '') -- OpenAI does not stream pure JSON objects
 			process_line(output)
 		until not stream_buffer:find('\n')
-	end, nil, function() p = nil end)
+	end, nil, function() p, buffer.undo_collection = nil, true end)
 
 	local message = {role = 'user', content = input}
 	table.insert(messages, message)
@@ -294,6 +295,9 @@ function M.prompt(input)
 	p:write(data)
 	p:close()
 	buffer.annotation_text[buffer.line_count] = _L['Awaiting response...']
+	buffer:empty_undo_buffer() -- "commit" user's prompt
+	buffer.undo_collection = false -- will be reset when p exits
+	rawset(buffer, 'modify', true) -- override Scintilla's understanding of save points
 end
 
 --- Undo the most recent chat message you submitted.
@@ -313,6 +317,8 @@ function M.undo()
 
 	table.remove(buffer.llm.messages) -- assistant
 	table.remove(buffer.llm.messages) -- user
+
+	buffer:empty_undo_buffer()
 end
 
 local SERIALIZED_MARKER = '-- Textadept LLM serialized chat\n'
@@ -331,6 +337,8 @@ events.connect(events.FILE_AFTER_SAVE, function(filename)
 	end
 	f:write('}\n')
 	buffer.mod_time = os.time() -- prevent modified detection
+	rawset(buffer, 'modify', false)
+	buffer:set_save_point()
 end)
 
 -- Loads a previously saved, serialized chat.
