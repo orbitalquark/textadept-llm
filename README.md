@@ -65,12 +65,11 @@ Arguments:
 <a id="events.MODEL_RESPONSE_STREAM"></a>
 ## `events.MODEL_RESPONSE_STREAM`
 
-Emitted after a model emits a paragraph of streamed response.
+Emitted after a model emits a streamed response.
 
-Paragraphs are delimitted by consecutive newlines.
-This could be used to send the paragraph to a text-to-speech engine.
 Arguments:
 - *text*: Partial model message.
+- *done*: Whether or not this is the last part of the stream.
 
 <a id="llm.chat"></a>
 ## `llm.chat`([*model*[, *system_prompt*[, *current_buffer*]]])

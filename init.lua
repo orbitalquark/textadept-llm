@@ -112,11 +112,10 @@ events.MODEL_RESPONSE_STREAM = 'model_response_stream'
 -- - *message*: The model's entire response.
 -- @field _G.events.MODEL_RESPONSE
 
---- Emitted after a model emits a paragraph of streamed response.
--- Paragraphs are delimitted by consecutive newlines.
--- This could be used to send the paragraph to a text-to-speech engine.
+--- Emitted after a model emits a streamed response.
 -- Arguments:
 -- - *text*: Partial model message.
+-- - *done*: Whether or not this is the last part of the stream.
 -- @field _G.events.MODEL_RESPONSE_STREAM
 
 --- Constructs a curl request to an endpoint.
@@ -224,7 +223,6 @@ function M.prompt(input)
 
 	local streaming = M.config.model[model].stream
 	local thinking = false -- some models always print think tags, even if think is off; ignore them
-	local current_line = ''
 
 	-- Outputs the chat response content from an incoming line of JSON output.
 	-- @param line String JSON line.
@@ -248,18 +246,10 @@ function M.prompt(input)
 			local last_message = messages[#messages]
 			if streaming and last_message.role ~= 'user' then
 				last_message.content = last_message.content .. content -- combine
-				current_line = current_line .. content
 			else
-				if streaming then current_line = content end
 				table.insert(messages, message)
 				buffer:add_text('\n')
 				buffer:annotation_clear_all() -- clear "Awaiting response..."
-			end
-			while streaming and current_line:find('\n\n') do
-				local remainder
-				current_line, remainder = current_line:match('^(.-)\n\n(.*)$')
-				events.emit(events.MODEL_RESPONSE_STREAM, current_line)
-				current_line = remainder or ''
 			end
 		end
 
@@ -273,6 +263,7 @@ function M.prompt(input)
 
 		if streaming then
 			local ok, done = pcall(M.config.done, response)
+			events.emit(events.MODEL_RESPONSE_STREAM, content, ok and done)
 			if ok and not done then return end
 		end
 		mark_llm_message_end(buffer:line_from_position(buffer.current_pos))
@@ -280,7 +271,6 @@ function M.prompt(input)
 		if response.eval_count then -- Ollama
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
 		end
-		if streaming then events.emit(events.MODEL_RESPONSE_STREAM, current_line) end
 		events.emit(events.MODEL_RESPONSE, messages[#messages].content)
 	end
 
