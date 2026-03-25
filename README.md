@@ -73,7 +73,7 @@ Arguments:
 - *text*: Partial model message.
 
 <a id="llm.chat"></a>
-## `llm.chat`([*model*[, *system_prompt*]])
+## `llm.chat`([*model*[, *system_prompt*[, *current_buffer*]]])
 
 Opens a new chat session with a model.
 
@@ -81,13 +81,8 @@ Parameters:
 - *model*:  String model name to chat with. If `nil`, the user is prompted for one.
 - *system_prompt*:  String system prompt to use for *model*. If both this and *model*
 	are `nil`, the user has the option to specify a system prompt in the model prompt.
-
-<a id="llm.chat_directory"></a>
-## `llm.chat_directory`
-
-The directory to save chats to.
-
-The default value is *~/.textadept/chats/*.
+- *current_buffer*:  Whether or not to chat in the current buffer. The default value is
+	`false`.
 
 <a id="llm.config"></a>
 ## `llm.config`
@@ -130,14 +125,6 @@ Fields:
 
 See also: [`llm.config`](#llm.config)
 
-<a id="llm.load"></a>
-## `llm.load`([*filename*])
-
-Loads a previously saved chat into the current model, discarding the current chat.
-
-Parameters:
-- *filename*:  String filename to load. If `nil`, the user is prompted for one.
-
 <a id="llm.prompt"></a>
 ## `llm.prompt`(*input*)
 
@@ -148,14 +135,6 @@ A model's response will be printed when it is received.
 Parameters:
 - *input*:  String input to prompt with. Any '@*filename*' references are replaced with
 	their file's contents.
-
-<a id="llm.save"></a>
-## `llm.save`([*filename*])
-
-Saves the current chat.
-
-Parameters:
-- *filename*:  String filename to save to. If `nil`, the user is prompted for one.
 
 <a id="llm.undo"></a>
 ## `llm.undo`()

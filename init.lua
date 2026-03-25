@@ -119,20 +119,6 @@ events.MODEL_RESPONSE_STREAM = 'model_response_stream'
 -- - *text*: Partial model message.
 -- @field _G.events.MODEL_RESPONSE_STREAM
 
---- The directory to save chats to.
--- The default value is *~/.textadept/chats/*.
-M.chat_directory = _USERHOME .. '/chats'
-if WIN32 then M.chat_directory = M.chat_directory:gsub('/', '\\') end
-
---- Returns the current chat directory, creating it if necessary.
-local function get_chat_directory()
-	local chat_dir = M.chat_directory
-	local mode = lfs.attributes(chat_dir, 'mode')
-	assert(not mode or mode == 'directory', 'chat_directory must be a directory')
-	if not mode then assert(lfs.mkdir(chat_dir)) end
-	return chat_dir
-end
-
 --- Constructs a curl request to an endpoint.
 -- POST requests should append ' -d @-' to the returned result.
 -- @param endpoint String endpoint name to send the request to.
@@ -149,9 +135,35 @@ local function curl(endpoint, streaming)
 		table.concat(headers, ' '))
 end
 
---- Returns a buffer type for a model.
--- @param model String model name.
-local function chat_buffer_type(model) return string.format('[%s - %s]', _L['Chat'], model) end
+--- Prompts the user to select a model to chat with.
+-- @param[opt] allow_system_prompt Whether or not to allow the user to set the model's
+--	system prompt. The default value is `false`.
+-- @return model name and optional system prompt
+local function get_model(allow_system_prompt)
+	local p<close> = io.popen(curl(M.config.models_endpoint))
+	local response = p:read('a')
+	if response == '' then error('cannot fetch model list. Is the LLM server running?') end
+	response = json.decode(response)
+
+	local models
+	for _, v in pairs(response) do
+		if type(v) == 'table' then
+			models = v -- assume first list result contains models
+			break
+		end
+	end
+
+	local names = table.map(models, function(mod) return mod[M.config.model_name_key] end)
+	if #names == 0 then error('no models to chat with', 2) end
+	table.sort(names)
+	local i, button = ui.dialogs.list{
+		title = _L['Select Model'], items = names, button2 = _L['Cancel'],
+		button3 = allow_system_prompt and _L['Set system prompt...'] or nil, return_button = true
+	}
+	if not i or button == 2 then return end
+
+	return names[i], button == 3 and ui.dialogs.input{title = _L['System Prompt']} or nil
+end
 
 --- Marks the last character on the given line to help determine where user prompt starts.
 -- @param line Line number to mark.
@@ -164,39 +176,22 @@ end
 -- @param[opt] model String model name to chat with. If `nil`, the user is prompted for one.
 -- @param[opt] system_prompt String system prompt to use for *model*. If both this and *model*
 --	are `nil`, the user has the option to specify a system prompt in the model prompt.
-function M.chat(model, system_prompt)
+-- @param[opt] current_buffer Whether or not to chat in the current buffer. The default value is
+--	`false`.
+function M.chat(model, system_prompt, current_buffer)
 	if not assert_type(model, 'string/nil', 1) then
-		local p<close> = io.popen(curl(M.config.models_endpoint))
-		local response = p:read('a')
-		if response == '' then error('cannot fetch model list. Is the LLM server running?') end
-		response = json.decode(response)
-
-		local models
-		for _, v in pairs(response) do
-			if type(v) == 'table' then
-				models = v -- assume first list result contains models
-				break
-			end
+		if not system_prompt then
+			model, system_prompt = get_model(true)
+		else
+			model = get_model()
 		end
-
-		local names = table.map(models, function(mod) return mod[M.config.model_name_key] end)
-		if #names == 0 then error('no local models to chat with', 2) end
-		table.sort(names)
-		local i, button = ui.dialogs.list{
-			title = _L['Select Model'], items = names, button2 = _L['Cancel'],
-			button3 = _L['Set system prompt...'], return_button = true
-		}
-		if button == 3 then system_prompt = ui.dialogs.input{title = _L['System Prompt']} end
-		if not i or button == 2 then return end
-
-		model = names[i]
 	end
-
-	ui.print_to(chat_buffer_type(model), string.format('%s %s', _L['Chatting with'], model))
+	if not current_buffer then buffer.new() end
+	buffer:add_text(string.format('%s %s\n', _L['Chatting with'], model))
 	buffer:set_lexer('markdown')
 	buffer.llm = {model = model, messages = {}}
 	if assert_type(system_prompt, 'string/nil', 2) and system_prompt ~= '' then
-		ui.print_to(chat_buffer_type(model), string.format('%s: %s', _L['System Prompt'], system_prompt))
+		buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], system_prompt))
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
 	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
@@ -330,16 +325,13 @@ function M.undo()
 	table.remove(buffer.llm.messages) -- user
 end
 
---- Saves the current chat.
--- @param[opt] filename String filename to save to. If `nil`, the user is prompted for one.
-function M.save(filename)
-	if not buffer.llm then return end
-	if not assert_type(filename, 'string/nil', 1) then
-		filename = ui.dialogs.save{title = _L['Save Chat'], dir = get_chat_directory()}
-		if not filename then return end
-	end
+local SERIALIZED_MARKER = '-- Textadept LLM serialized chat\n'
 
+-- Serialize the current chat to its filename, instead of saving plain-text.
+events.connect(events.FILE_AFTER_SAVE, function(filename)
+	if not buffer.llm then return end
 	local f<close> = io.open(filename, 'w')
+	f:write(SERIALIZED_MARKER)
 	f:write('return {\n')
 	for _, message in ipairs(buffer.llm.messages) do
 		f:write('\t{\n')
@@ -348,32 +340,27 @@ function M.save(filename)
 		f:write('\t},\n')
 	end
 	f:write('}\n')
-end
+	buffer.mod_time = os.time() -- prevent modified detection
+end)
 
---- Loads a previously saved chat into the current model, discarding the current chat.
--- @param[opt] filename String filename to load. If `nil`, the user is prompted for one.
-function M.load(filename)
-	if not buffer.llm then
-		ui.dialogs.message{title = _L['Load Chat'], text = _L['You need to start a chat to load one.']}
+-- Loads a previously saved, serialized chat.
+events.connect(events.FILE_OPENED, function(filename)
+	if buffer:get_line(1) ~= SERIALIZED_MARKER then return end
+	local ok, model = pcall(get_model)
+	if not ok then
+		ui.dialogs.message{
+			title = _L['Error Loading Chat'],
+			text = string.format('%s: %s', _L['Unable to select a model to chat with'], model)
+		}
 		return
 	end
 
-	if not assert_type(filename, 'string/nil', 1) then
-		filename = ui.dialogs.open{title = _L['Load Chat'], dir = get_chat_directory()}
-		if not filename then return end
-	end
-
 	local messages = assert(loadfile(filename, 't', {}))()
-	buffer.llm.messages = messages
+	local system_prompt = messages[1].role == 'system' and messages[1].content or nil
 
 	buffer:clear_all()
-
-	local model = buffer.llm.model
-	buffer:add_text(string.format('%s %s\n', _L['Chatting with'], model))
-	if messages[1].role == 'system' then
-		buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], messages[1].content))
-	end
-	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
+	M.chat(model, system_prompt, true)
+	buffer.llm.messages = messages
 
 	for i, message in ipairs(messages) do
 		if i == 1 and messages[1].role == 'system' then goto continue end
@@ -388,7 +375,18 @@ function M.load(filename)
 		buffer:add_text('\n\n')
 		::continue::
 	end
+
+	buffer:empty_undo_buffer()
+	buffer:set_save_point()
+end)
+
+--- Disables change history for chats.
+local function disable_change_history()
+	if buffer.llm then view.change_history = view.CHANGE_HISTORY_DISABLED end
 end
+events.connect(events.FILE_OPENED, disable_change_history)
+events.connect(events.BUFFER_AFTER_SWITCH, disable_change_history)
+events.connect(events.VIEW_AFTER_SWITCH, disable_change_history)
 
 -- Respond to keypresses in a chat buffer.
 -- - `\n` prompts the model with either the current line or selected lines.
@@ -450,10 +448,8 @@ end)
 -- (Insert 'LLM' menu in alphabetical order.)
 _L['LLM (AI)'] = 'LLM (_AI)'
 _L['Chat With Model...'] = '_Chat With Model...'
-_L['Stop Incoming Message'] = 'S_top Incoming Message'
+_L['Stop Incoming Message'] = '_Stop Incoming Message'
 _L['Undo Last Message'] = '_Undo Last Message'
-_L['Save Chat...'] = '_Save Chat...'
-_L['Load Chat...'] = '_Load Chat...'
 local m_tools = textadept.menu.menubar['Tools']
 local found_area
 for i = 1, #m_tools - 1 do
@@ -467,10 +463,7 @@ for i = 1, #m_tools - 1 do
 				{_L['Chat With Model...'], M.chat}, --
 				{''}, --
 				{_L['Stop Incoming Message'], function() if p then p:kill() end end}, --
-				{_L['Undo Last Message'], M.undo}, --
-				{''}, --
-				{_L['Save Chat...'], M.save}, --
-				{_L['Load Chat...'], M.load}
+				{_L['Undo Last Message'], M.undo} --
 			})
 			break
 		end
