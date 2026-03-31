@@ -45,8 +45,17 @@ local M = {}
 -- @see config
 M.configs = {}
 
---- Returns a new table where unknown keys return the given table as a default.
-local function default(t) return setmetatable({}, {__index = function() return t end}) end
+--- Returns a new table where unknown keys return the given table's contents as a default.
+local function default(t)
+	return setmetatable({}, {
+		__index = function(model, name)
+			local config = {}
+			for k, v in pairs(t) do config[k] = v end -- copy default
+			rawset(model, name, config)
+			return config
+		end
+	})
+end
 
 M.configs.openai = {
 	url = 'https://api.openai.com/v1', --
@@ -160,7 +169,6 @@ local function get_model(allow_system_prompt)
 		button3 = allow_system_prompt and _L['Set system prompt...'] or nil, return_button = true
 	}
 	if not i or button == 2 then return nil, nil end
-
 	return names[i], button == 3 and ui.dialogs.input{title = _L['System Prompt']} or nil
 end
 
@@ -440,6 +448,7 @@ end)
 -- (Insert 'LLM' menu in alphabetical order.)
 _L['LLM (AI)'] = 'LLM (_AI)'
 _L['Chat With Model...'] = '_Chat With Model...'
+_L['Set Temperature...'] = 'Set _Temperature...'
 _L['Stop Incoming Message'] = '_Stop Incoming Message'
 _L['Undo Last Message'] = '_Undo Last Message'
 local m_tools = textadept.menu.menubar['Tools']
@@ -454,6 +463,17 @@ for i = 1, #m_tools - 1 do
 				title = _L['LLM (AI)'], --
 				{_L['Chat With Model...'], M.chat}, --
 				{''}, --
+				{
+					_L['Set Temperature...'], function()
+						if not buffer.llm then return end
+						local model = buffer.llm.model
+						local temperature = ui.dialogs.input{
+							title = _L['Set Temperature'], text = M.config.model[model].temperature
+						}
+						if not temperature or not tonumber(temperature) then return end
+						M.config.model[model].temperature = tonumber(temperature)
+					end
+				}, --
 				{_L['Stop Incoming Message'], function() if p then p:kill() end end}, --
 				{_L['Undo Last Message'], M.undo} --
 			})
