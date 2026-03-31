@@ -380,14 +380,6 @@ events.connect(events.FILE_OPENED, function(filename)
 	buffer:set_save_point()
 end)
 
---- Disables change history for chats.
-local function disable_change_history()
-	if buffer.llm then view.change_history = view.CHANGE_HISTORY_DISABLED end
-end
-events.connect(events.FILE_OPENED, disable_change_history)
-events.connect(events.BUFFER_AFTER_SWITCH, disable_change_history)
-events.connect(events.VIEW_AFTER_SWITCH, disable_change_history)
-
 -- Respond to keypresses in a chat buffer.
 -- - `\n` prompts the model with either the current line or selected lines.
 -- - `@` presents a list of open files to add to the prompt for context.
