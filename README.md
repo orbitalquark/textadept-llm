@@ -16,6 +16,8 @@ llm.config.url = 'https://dev.example.com' -- if not OpenAI
 llm.config.api_key = 'API_KEY'
 -- Local mlx_lm server config.
 llm.config.url = 'http://localhost:8080/v1'
+-- Local Ollama config.
+llm.config = llm.configs.ollama
 ```
 
 Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
@@ -79,7 +81,7 @@ Opens a new chat session with a model.
 Parameters:
 - *model*:  String model name to chat with. If `nil`, the user is prompted for one.
 - *system_prompt*:  String system prompt to use for *model*. If both this and *model*
-	are `nil`, the user has the option to specify a system prompt in the model prompt.
+	are `nil`, the user has the option to specify a system prompt for the model.
 - *current_buffer*:  Whether or not to chat in the current buffer. The default value is
 	`false`.
 
@@ -134,6 +136,19 @@ A model's response will be printed when it is received.
 Parameters:
 - *input*:  String input to prompt with. Any '@*filename*' references are replaced with
 	their file's contents.
+
+<a id="llm.prompts"></a>
+## `llm.prompts`
+
+Map of system prompt names (e.g.
+personas) to their prompt text.
+Users will typically select from this list prior to starting a chat session.
+
+Usage:
+
+```lua
+llm.prompts.coding = 'You are a helpful coding assistant'
+```
 
 <a id="llm.undo"></a>
 ## `llm.undo`()

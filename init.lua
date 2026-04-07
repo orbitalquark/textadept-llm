@@ -15,6 +15,8 @@
 -- llm.config.api_key = 'API_KEY'
 -- -- Local mlx_lm server config.
 -- llm.config.url = 'http://localhost:8080/v1'
+-- -- Local Ollama config.
+-- llm.config = llm.configs.ollama
 -- ```
 --
 -- Start a chat session from the "Tools > LLM (AI) > Chat..." menu.
@@ -44,6 +46,11 @@ local M = {}
 -- @field ollama
 -- @see config
 M.configs = {}
+
+--- Map of system prompt names (e.g. personas) to their prompt text.
+-- Users will typically select from this list prior to starting a chat session.
+-- @usage llm.prompts.coding = 'You are a helpful coding assistant'
+M.prompts = {}
 
 --- Returns a new table where unknown keys return the given table's contents as a default.
 local function default(t)
@@ -144,8 +151,8 @@ local function curl(endpoint, streaming)
 end
 
 --- Prompts the user to select a model to chat with.
--- @param[opt] allow_system_prompt Whether or not to allow the user to set the model's
---	system prompt. The default value is `false`.
+-- @param[opt] allow_system_prompt Whether or not to allow the user to choose or set a system
+--	prompt for the model. The default value is `false`.
 -- @return model name and optional system prompt
 local function get_model(allow_system_prompt)
 	local p<close> = io.popen(curl(M.config.models_endpoint))
@@ -161,15 +168,36 @@ local function get_model(allow_system_prompt)
 		end
 	end
 
+	-- Pick a model from the list.
 	local names = table.map(models, function(mod) return mod[M.config.model_name_key] end)
 	if #names == 0 then error('no models to chat with', 2) end
 	table.sort(names)
 	local i, button = ui.dialogs.list{
 		title = _L['Select Model'], items = names, button2 = _L['Cancel'],
-		button3 = allow_system_prompt and _L['Set system prompt...'] or nil, return_button = true
+		button3 = allow_system_prompt and not next(M.prompts) and _L['Set system prompt...'] or nil,
+		return_button = true
 	}
 	if not i or button == 2 then return nil, nil end
-	return names[i], button == 3 and ui.dialogs.input{title = _L['System Prompt']} or nil
+	local model = names[i]
+	if button == 3 then return model, ui.dialogs.input{title = _L['System Prompt']} end
+	if not allow_system_prompt or not next(M.prompts) then return model, nil end
+
+	-- Pick a system prompt from the list.
+	local prompts = {}
+	for name, prompt in pairs(M.prompts) do
+		prompts[#prompts + 1] = name
+		prompts[name] = prompt
+	end
+	table.sort(prompts)
+	local items = {}
+	for _, name in ipairs(prompts) do items[#items + 1], items[#items + 2] = name, prompts[name] end
+	i, button = ui.dialogs.list{
+		title = _L['Select System Prompt'], columns = {_L['Name'], _L['Prompt']}, items = items,
+		button2 = _L['No system prompt'], button3 = _L['Custom system prompt...'], return_button = true
+	}
+	if not i or button == 2 then return model, nil end
+	if button == 1 then return model, prompts[prompts[i]] end
+	return model, ui.dialogs.input{title = _L['System Prompt'], button2 = _L['No system prompt']}
 end
 
 --- Marks the last character on the given line to help determine where user prompt starts.
@@ -182,7 +210,7 @@ end
 --- Opens a new chat session with a model.
 -- @param[opt] model String model name to chat with. If `nil`, the user is prompted for one.
 -- @param[opt] system_prompt String system prompt to use for *model*. If both this and *model*
---	are `nil`, the user has the option to specify a system prompt in the model prompt.
+--	are `nil`, the user has the option to specify a system prompt for the model.
 -- @param[opt] current_buffer Whether or not to chat in the current buffer. The default value is
 --	`false`.
 function M.chat(model, system_prompt, current_buffer)
