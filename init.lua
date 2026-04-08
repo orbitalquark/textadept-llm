@@ -483,7 +483,7 @@ end)
 -- Add a menu.
 -- (Insert 'LLM' menu in alphabetical order.)
 _L['LLM (AI)'] = 'LLM (_AI)'
-_L['Chat With Model...'] = '_Chat With Model...'
+_L['New Chat...'] = 'New _Chat...'
 _L['Set Temperature...'] = 'Set _Temperature...'
 _L['Stop Incoming Message'] = '_Stop Incoming Message'
 _L['Undo Last Message'] = '_Undo Last Message'
@@ -497,7 +497,7 @@ for i = 1, #m_tools - 1 do
 		if 'LLM (AI)' < label:gsub('^_', '') or m_tools[i][1] == '' then
 			table.insert(m_tools, i, { --
 				title = _L['LLM (AI)'], --
-				{_L['Chat With Model...'], M.chat}, --
+				{_L['New Chat...'], M.chat}, --
 				{''}, --
 				{
 					_L['Set Temperature...'], function()
