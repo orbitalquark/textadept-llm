@@ -95,7 +95,7 @@ Parameters:
 The config table in `configs` to use.
 
 Note: you may still have to configure things like the URL and API key.
-The default value is `llm.config.openai`.
+The default value is `llm.configs.openai`.
 
 Fields:
 - `url`:  String URL and port the server is running on.
@@ -130,13 +130,6 @@ Fields:
 
 See also: [`llm.config`](#llm.config)
 
-<a id="llm.print_system_prompt"></a>
-## `llm.print_system_prompt`
-
-Whether or not to print the system prompt when starting up a chat.
-
-The default value is `false`.
-
 <a id="llm.prompt"></a>
 ## `llm.prompt`(*input*)
 
@@ -160,6 +153,13 @@ Usage:
 ```lua
 llm.prompts.coding = 'You are a helpful coding assistant'
 ```
+
+<a id="llm.show_system_prompt"></a>
+## `llm.show_system_prompt`
+
+Whether or not to show the system prompt when starting up a chat.
+
+The default value is `false`.
 
 <a id="llm.undo"></a>
 ## `llm.undo`()

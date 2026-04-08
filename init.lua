@@ -56,9 +56,9 @@ M.configs = {}
 -- @usage llm.prompts.coding = 'You are a helpful coding assistant'
 M.prompts = {}
 
---- Whether or not to print the system prompt when starting up a chat.
+--- Whether or not to show the system prompt when starting up a chat.
 -- The default value is `false`.
-M.print_system_prompt = false
+M.show_system_prompt = false
 
 --- Returns a new table where unknown keys return the given table's contents as a default.
 local function default(t)
@@ -97,7 +97,7 @@ M.configs.ollama = {
 
 --- The config table in `configs` to use.
 -- Note: you may still have to configure things like the URL and API key.
--- The default value is `llm.config.openai`.
+-- The default value is `llm.configs.openai`.
 -- @field url String URL and port the server is running on.
 -- @field models_endpoint String REST endpoint that returns list of available models.
 -- @field model_name_key String key whose value is the model name for each model in the REST
@@ -235,7 +235,7 @@ function M.chat(model, system_prompt, current_buffer)
 	buffer:set_lexer('markdown')
 	buffer.llm = {model = model, messages = {}}
 	if assert_type(system_prompt, 'string/nil', 2) ~= '' then
-		if M.print_system_prompt then
+		if M.show_system_prompt then
 			buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], system_prompt))
 		end
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
