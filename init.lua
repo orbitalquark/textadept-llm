@@ -35,9 +35,13 @@
 --
 -- The default model options enable streaming.
 --
+-- **Note:** if you are also using the [scratch][] module, require this module _after_ scratch,
+-- so that chats can be considered scratch buffers too.
+--
 -- [OpenAI-compatible]: https://developers.openai.com/api/reference/overview
 -- [mlx_lm]: https://github.com/ml-explore/mlx-lm
 -- [Ollama]: https://ollama.com/
+-- [scratch]: https://github.com/orbitalquark/textadept-scratch
 -- @module llm
 local M = {}
 
