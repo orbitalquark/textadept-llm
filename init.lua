@@ -366,6 +366,7 @@ events.connect(events.FILE_AFTER_SAVE, function(filename)
 	local f<close> = io.open(filename, 'w')
 	f:write(SERIALIZED_MARKER)
 	f:write('return {\n')
+	f:write('model = "', buffer.llm.model, '",\n')
 	for _, message in ipairs(buffer.llm.messages) do
 		f:write('\t{\n')
 		f:write(string.format('role="%s",\n', message.role))
@@ -381,17 +382,24 @@ end)
 -- Loads a previously saved, serialized chat.
 events.connect(events.FILE_OPENED, function(filename)
 	if buffer:get_line(1) ~= SERIALIZED_MARKER then return end
-	local ok, model = pcall(get_model)
-	if not ok or not model then
-		ui.dialogs.message{
-			title = _L['Error Loading Chat'],
-			text = string.format('%s: %s', _L['Unable to select a model to chat with'],
-				model or _L['user cancelled'])
-		}
-		return
+	local messages = assert(load(buffer:get_text(), 'chunk', 't', {}))()
+
+	local model = messages.model
+	if model then messages.model = nil end
+	-- Previous iterations of this module did not store model, so prompt for one.
+	if not model then
+		local ok
+		ok, model = pcall(get_model)
+		if not ok or not model then
+			ui.dialogs.message{
+				title = _L['Error Loading Chat'],
+				text = string.format('%s: %s', _L['Unable to select a model to chat with'],
+					model or _L['user cancelled'])
+			}
+			return
+		end
 	end
 
-	local messages = assert(loadfile(filename, 't', {}))()
 	local system_prompt = messages[1].role == 'system' and messages[1].content or nil
 
 	buffer:clear_all()
