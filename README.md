@@ -126,6 +126,13 @@ Fields:
 
 See also: [`llm.config`](#llm.config)
 
+<a id="llm.print_system_prompt"></a>
+## `llm.print_system_prompt`
+
+Whether or not to print the system prompt when starting up a chat.
+
+The default value is `false`.
+
 <a id="llm.prompt"></a>
 ## `llm.prompt`(*input*)
 

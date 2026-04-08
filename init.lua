@@ -52,6 +52,10 @@ M.configs = {}
 -- @usage llm.prompts.coding = 'You are a helpful coding assistant'
 M.prompts = {}
 
+--- Whether or not to print the system prompt when starting up a chat.
+-- The default value is `false`.
+M.print_system_prompt = false
+
 --- Returns a new table where unknown keys return the given table's contents as a default.
 local function default(t)
 	return setmetatable({}, {
@@ -226,8 +230,10 @@ function M.chat(model, system_prompt, current_buffer)
 	buffer:add_text(string.format('%s %s\n', _L['Chatting with'], model))
 	buffer:set_lexer('markdown')
 	buffer.llm = {model = model, messages = {}}
-	if assert_type(system_prompt, 'string/nil', 2) and system_prompt ~= '' then
-		buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], system_prompt))
+	if assert_type(system_prompt, 'string/nil', 2) ~= '' then
+		if M.print_system_prompt then
+			buffer:add_text(string.format('%s: %s\n', _L['System Prompt'], system_prompt))
+		end
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
 	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
