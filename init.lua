@@ -350,6 +350,7 @@ end
 --- Undo the most recent chat message you submitted.
 -- You will be able to edit and resend it.
 function M.undo()
+	if p then p:kill() end
 	local mark_bit = 1 << M.MARK_PROMPT - 1
 	local line = buffer:marker_previous(buffer.line_count, mark_bit)
 	if line == -1 then return end
