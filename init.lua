@@ -272,16 +272,12 @@ function M.prompt(input)
 	local streaming = M.config.model[model].stream
 	local thinking = false -- some models always print think tags, even if think is off; ignore them
 
-	-- Outputs the chat response content from an incoming line of JSON output.
-	-- @param line String JSON line.
-	local function process_line(line)
-		-- print('Process:', line)
-		if line:find('^%s*%[DONE%]') then return end -- OpenAI stream sentinel
-		if line:find('keepalive %d+/%d+') then return end -- mlx_lm.server placeholder
-		local response = json.decode(line)
+	-- Extracts and outputs the chat response content from an incoming JSON response.
+	-- @param response JSON response object.
+	local function process_response(response)
 		local ok, message = pcall(M.config.chat_message, response)
 		local content = ok and (message.content or '') or
-			string.format('error processing line `%s`: %s', line, message)
+			string.format('error processing response `%s`: %s', json.encode(response), message)
 		if ok then
 			if not M.config.model[model].think and (content:find('</?think>') or thinking) then
 				if streaming then
@@ -327,9 +323,19 @@ function M.prompt(input)
 		-- print('Receive:', output)
 		stream_buffer = stream_buffer ~= '' and stream_buffer .. output or output
 		repeat
+			local response
 			output, stream_buffer = stream_buffer:match('^([^\r\n]+)[\r\n]*(.*)$')
+			-- print('Process', output)
 			output = output:gsub('^data:', '') -- OpenAI does not stream pure JSON objects
-			process_line(output)
+			if output:find('^%s*%[DONE%]') then goto continue end -- OpenAI stream sentinel
+			if output:find('keepalive %d+/%d+') then goto continue end -- mlx_lm.server placeholder			
+			response = json.decode(output)
+			if not response then
+				stream_buffer = output .. stream_buffer -- buffer
+				goto continue
+			end
+			process_response(response)
+			::continue::
 		until not stream_buffer:find('\n')
 	end, nil, function() p, buffer.undo_collection = nil, true end)
 
