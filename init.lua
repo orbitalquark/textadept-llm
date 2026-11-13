@@ -209,8 +209,9 @@ local function get_model(allow_system_prompt)
 end
 
 --- Marks the last character on the given line to help determine where user prompt starts.
+-- @param buffer Buffer to mark.
 -- @param line Line number to mark.
-local function mark_llm_message_end(line)
+local function mark_llm_message_end(buffer, line)
 	buffer.indicator_current = M.INDIC_LLM_END
 	buffer:indicator_fill_range(buffer.line_end_position[line] - 1, 1)
 end
@@ -240,7 +241,7 @@ function M.chat(model, system_prompt, current_buffer)
 		end
 		buffer.llm.messages[1] = {role = 'system', content = system_prompt}
 	end
-	mark_llm_message_end(buffer:line_from_position(buffer.current_pos) - 1)
+	mark_llm_message_end(buffer, buffer:line_from_position(buffer.current_pos) - 1)
 	buffer:empty_undo_buffer()
 end
 
@@ -310,7 +311,7 @@ function M.prompt(input)
 			events.emit(events.MODEL_RESPONSE_STREAM, content, ok and done)
 			if ok and not done then return end
 		end
-		mark_llm_message_end(buffer:line_from_position(buffer.current_pos))
+		mark_llm_message_end(buffer, buffer:line_from_position(buffer.current_pos))
 		buffer:add_text('\n\n')
 		if response.eval_count then -- Ollama
 			ui.statusbar_text = response.eval_count / response.eval_duration * 10^9 .. ' tokens/s'
@@ -431,7 +432,7 @@ events.connect(events.FILE_OPENED, function(filename)
 			local start_line = end_line - select(2, message.content:gsub('\n', ''))
 			for j = start_line, end_line do buffer:marker_add(j, M.MARK_PROMPT) end
 		elseif message.role == 'assistant' then
-			mark_llm_message_end(buffer:line_from_position(buffer.current_pos))
+			mark_llm_message_end(buffer, buffer:line_from_position(buffer.current_pos))
 		end
 		buffer:add_text('\n\n')
 		::continue::
